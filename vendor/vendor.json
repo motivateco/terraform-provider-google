@@ -382,10 +382,10 @@
 			"revision": "d30f09973e19c1dfcd120b2d9c4f168e68d6b5d5"
 		},
 		{
-			"checksumSHA1": "b0nQutPMJHeUmz4SjpreotAo6Yk=",
+			"checksumSHA1": "R6me0jVmcT/OPo80Fe0qo5fRwHc=",
 			"path": "github.com/hashicorp/go-plugin",
-			"revision": "f72692aebca2008343a9deb06ddb4b17f7051c15",
-			"revisionTime": "2017-02-17T16:27:05Z"
+			"revision": "a5174f84d7f8ff00fb07ab4ef1f380d32eee0e63",
+			"revisionTime": "2017-08-16T15:18:19Z"
 		},
 		{
 			"checksumSHA1": "85XUnluYJL7F55ptcwdmN8eSOsk=",
@@ -686,6 +686,12 @@
 			"path": "github.com/mitchellh/go-homedir",
 			"revision": "b8bc1bf767474819792c23f32d8286a45736f1c6",
 			"revisionTime": "2016-12-03T19:45:07Z"
+		},
+		{
+			"checksumSHA1": "6TBW88DSxRHf4WvOC9K5ilBZx/8=",
+			"path": "github.com/mitchellh/go-testing-interface",
+			"revision": "7bf6f6eaf1bed2fd3c6c63114b18cb64facb9de2",
+			"revisionTime": "2017-09-01T15:50:38Z"
 		},
 		{
 			"checksumSHA1": "xyoJKalfQwTUN1qzZGQKWYAwl0A=",
@@ -1222,6 +1228,18 @@
 			"path": "google.golang.org/grpc/grpclog",
 			"revision": "50955793b0183f9de69bd78e2ec251cf20aab121",
 			"revisionTime": "2017-01-11T19:10:52Z"
+		},
+		{
+			"checksumSHA1": "/M6Lug7Dj22dZNu4X6bZDVa5mkQ=",
+			"path": "google.golang.org/grpc/health",
+			"revision": "91999f444f2aa89f2f873c8429a424701309bec4",
+			"revisionTime": "2017-09-01T23:45:41Z"
+		},
+		{
+			"checksumSHA1": "6vY7tYjV84pnr3sDctzx53Bs8b0=",
+			"path": "google.golang.org/grpc/health/grpc_health_v1",
+			"revision": "91999f444f2aa89f2f873c8429a424701309bec4",
+			"revisionTime": "2017-09-01T23:45:41Z"
 		},
 		{
 			"checksumSHA1": "T3Q0p8kzvXFnRkMaK/G8mCv6mc0=",
