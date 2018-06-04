@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	compute "google.golang.org/api/compute/v1"
+	"google.golang.org/api/compute/v1"
 
 	"github.com/hashicorp/terraform/helper/hashcode"
 	"github.com/hashicorp/terraform/terraform"
@@ -19,35 +19,52 @@ func resourceComputeInstanceMigrateState(
 		return is, nil
 	}
 
+	var err error
+
 	switch v {
 	case 0:
 		log.Println("[INFO] Found Compute Instance State v0; migrating to v1")
-		is, err := migrateStateV0toV1(is)
+		is, err = migrateStateV0toV1(is)
 		if err != nil {
 			return is, err
 		}
 		fallthrough
 	case 1:
 		log.Println("[INFO] Found Compute Instance State v1; migrating to v2")
-		is, err := migrateStateV1toV2(is)
+		is, err = migrateStateV1toV2(is)
 		if err != nil {
 			return is, err
 		}
-		return is, nil
+		fallthrough
 	case 2:
 		log.Println("[INFO] Found Compute Instance State v2; migrating to v3")
-		is, err := migrateStateV2toV3(is)
+		is, err = migrateStateV2toV3(is)
 		if err != nil {
 			return is, err
 		}
-		return is, nil
+		fallthrough
 	case 3:
 		log.Println("[INFO] Found Compute Instance State v3; migrating to v4")
-		is, err := migrateStateV3toV4(is, meta)
+		is, err = migrateStateV3toV4(is, meta)
 		if err != nil {
 			return is, err
 		}
-		return is, nil
+		fallthrough
+	case 4:
+		log.Println("[INFO] Found Compute Instance State v4; migrating to v5")
+		is, err = migrateStateV4toV5(is, meta)
+		if err != nil {
+			return is, err
+		}
+		fallthrough
+	case 5:
+		log.Println("[INFO] Found Compute Instance State v5; migrating to v6")
+		is, err = migrateStateV5toV6(is)
+		if err != nil {
+			return is, err
+		}
+		// when adding case 6, make sure to turn this into a fallthrough
+		return is, err
 	default:
 		return is, fmt.Errorf("Unexpected schema version: %d", v)
 	}
@@ -218,8 +235,7 @@ func migrateStateV3toV4(is *terraform.InstanceState, meta interface{}) (*terrafo
 
 			for _, disk := range instance.Disks {
 				if disk.Boot {
-					sourceUrl := strings.Split(disk.Source, "/")
-					is.Attributes["boot_disk.0.source"] = sourceUrl[len(sourceUrl)-1]
+					is.Attributes["boot_disk.0.source"] = GetResourceNameFromSelfLink(disk.Source)
 					is.Attributes["boot_disk.0.device_name"] = disk.DeviceName
 					break
 				}
@@ -228,7 +244,18 @@ func migrateStateV3toV4(is *terraform.InstanceState, meta interface{}) (*terrafo
 			is.Attributes["boot_disk.0.disk_encryption_key_raw"] = is.Attributes["disk.0.disk_encryption_key_raw"]
 			is.Attributes["boot_disk.0.disk_encryption_key_sha256"] = is.Attributes["disk.0.disk_encryption_key_sha256"]
 
-			// Don't worry about initialize_params, since the disk has already been created.
+			if is.Attributes["disk.0.size"] != "" && is.Attributes["disk.0.size"] != "0" {
+				is.Attributes["boot_disk.0.initialize_params.#"] = "1"
+				is.Attributes["boot_disk.0.initialize_params.0.size"] = is.Attributes["disk.0.size"]
+			}
+			if is.Attributes["disk.0.type"] != "" {
+				is.Attributes["boot_disk.0.initialize_params.#"] = "1"
+				is.Attributes["boot_disk.0.initialize_params.0.type"] = is.Attributes["disk.0.type"]
+			}
+			if is.Attributes["disk.0.image"] != "" {
+				is.Attributes["boot_disk.0.initialize_params.#"] = "1"
+				is.Attributes["boot_disk.0.initialize_params.0.image"] = is.Attributes["disk.0.image"]
+			}
 		} else if is.Attributes[fmt.Sprintf("disk.%d.scratch", i)] == "true" {
 			// Note: the GCP API does not allow for scratch disks without auto_delete, so this situation
 			// should never occur.
@@ -271,6 +298,13 @@ func migrateStateV3toV4(is *terraform.InstanceState, meta interface{}) (*terrafo
 	}
 
 	log.Printf("[DEBUG] Attributes after migration: %#v", is.Attributes)
+	return is, nil
+}
+
+func migrateStateV4toV5(is *terraform.InstanceState, meta interface{}) (*terraform.InstanceState, error) {
+	if v := is.Attributes["disk.#"]; v != "" {
+		return migrateStateV3toV4(is, meta)
+	}
 	return is, nil
 }
 
@@ -418,8 +452,7 @@ func getDiskFromAutoDeleteAndImage(config *Config, instance *compute.Instance, a
 		}
 		if disk.AutoDelete == autoDelete {
 			// Read the disk to check if its image matches
-			sourceUrl := strings.Split(disk.Source, "/")
-			fullDisk := allDisks[sourceUrl[len(sourceUrl)-1]]
+			fullDisk := allDisks[GetResourceNameFromSelfLink(disk.Source)]
 			sourceImage, err := getRelativePath(fullDisk.SourceImage)
 			if err != nil {
 				return nil, err
@@ -444,8 +477,7 @@ func getDiskFromAutoDeleteAndImage(config *Config, instance *compute.Instance, a
 		}
 		if disk.AutoDelete == autoDelete {
 			// Read the disk to check if its image matches
-			sourceUrl := strings.Split(disk.Source, "/")
-			fullDisk := allDisks[sourceUrl[len(sourceUrl)-1]]
+			fullDisk := allDisks[GetResourceNameFromSelfLink(disk.Source)]
 			sourceImage, err := getRelativePath(fullDisk.SourceImage)
 			if err != nil {
 				return nil, err
@@ -460,4 +492,21 @@ func getDiskFromAutoDeleteAndImage(config *Config, instance *compute.Instance, a
 	}
 
 	return nil, fmt.Errorf("could not find attached disk with image %q", image)
+}
+
+func migrateStateV5toV6(is *terraform.InstanceState) (*terraform.InstanceState, error) {
+	log.Printf("[DEBUG] Attributes before migration: %#v", is.Attributes)
+	if is.Attributes["boot_disk.0.initialize_params.#"] == "1" {
+		if (is.Attributes["boot_disk.0.initialize_params.0.size"] == "0" ||
+			is.Attributes["boot_disk.0.initialize_params.0.size"] == "") &&
+			is.Attributes["boot_disk.0.initialize_params.0.type"] == "" &&
+			is.Attributes["boot_disk.0.initialize_params.0.image"] == "" {
+			is.Attributes["boot_disk.0.initialize_params.#"] = "0"
+			delete(is.Attributes, "boot_disk.0.initialize_params.0.size")
+			delete(is.Attributes, "boot_disk.0.initialize_params.0.type")
+			delete(is.Attributes, "boot_disk.0.initialize_params.0.image")
+		}
+	}
+	log.Printf("[DEBUG] Attributes after migration: %#v", is.Attributes)
+	return is, nil
 }

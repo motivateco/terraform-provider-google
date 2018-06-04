@@ -3,11 +3,86 @@ package google
 import (
 	"fmt"
 	"log"
-	"strings"
+
+	"google.golang.org/api/compute/v1"
 
 	"github.com/hashicorp/terraform/helper/schema"
-	"google.golang.org/api/compute/v1"
 )
+
+var autoscalingPolicy *schema.Schema = &schema.Schema{
+	Type:     schema.TypeList,
+	Required: true,
+	MaxItems: 1,
+	Elem: &schema.Resource{
+		Schema: map[string]*schema.Schema{
+			"min_replicas": &schema.Schema{
+				Type:     schema.TypeInt,
+				Required: true,
+			},
+
+			"max_replicas": &schema.Schema{
+				Type:     schema.TypeInt,
+				Required: true,
+			},
+
+			"cooldown_period": &schema.Schema{
+				Type:     schema.TypeInt,
+				Optional: true,
+				Default:  60,
+			},
+
+			"cpu_utilization": &schema.Schema{
+				Type:     schema.TypeList,
+				Optional: true,
+				MaxItems: 1,
+				Elem: &schema.Resource{
+					Schema: map[string]*schema.Schema{
+						"target": &schema.Schema{
+							Type:     schema.TypeFloat,
+							Required: true,
+						},
+					},
+				},
+			},
+
+			"metric": &schema.Schema{
+				Type:     schema.TypeList,
+				Optional: true,
+				Elem: &schema.Resource{
+					Schema: map[string]*schema.Schema{
+						"name": &schema.Schema{
+							Type:     schema.TypeString,
+							Required: true,
+						},
+						"target": &schema.Schema{
+							Type:     schema.TypeFloat,
+							Required: true,
+						},
+
+						"type": &schema.Schema{
+							Type:     schema.TypeString,
+							Required: true,
+						},
+					},
+				},
+			},
+
+			"load_balancing_utilization": &schema.Schema{
+				Type:     schema.TypeList,
+				Optional: true,
+				MaxItems: 1,
+				Elem: &schema.Resource{
+					Schema: map[string]*schema.Schema{
+						"target": &schema.Schema{
+							Type:     schema.TypeFloat,
+							Required: true,
+						},
+					},
+				},
+			},
+		},
+	},
+}
 
 func resourceComputeAutoscaler() *schema.Resource {
 	return &schema.Resource{
@@ -33,81 +108,12 @@ func resourceComputeAutoscaler() *schema.Resource {
 
 			"zone": &schema.Schema{
 				Type:     schema.TypeString,
-				Required: true,
+				Optional: true,
+				Computed: true,
 				ForceNew: true,
 			},
 
-			"autoscaling_policy": &schema.Schema{
-				Type:     schema.TypeList,
-				Optional: true,
-				Elem: &schema.Resource{
-					Schema: map[string]*schema.Schema{
-						"min_replicas": &schema.Schema{
-							Type:     schema.TypeInt,
-							Required: true,
-						},
-
-						"max_replicas": &schema.Schema{
-							Type:     schema.TypeInt,
-							Required: true,
-						},
-
-						"cooldown_period": &schema.Schema{
-							Type:     schema.TypeInt,
-							Optional: true,
-							Default:  60,
-						},
-
-						"cpu_utilization": &schema.Schema{
-							Type:     schema.TypeList,
-							Optional: true,
-							Elem: &schema.Resource{
-								Schema: map[string]*schema.Schema{
-									"target": &schema.Schema{
-										Type:     schema.TypeFloat,
-										Required: true,
-									},
-								},
-							},
-						},
-
-						"metric": &schema.Schema{
-							Type:     schema.TypeList,
-							Optional: true,
-							Elem: &schema.Resource{
-								Schema: map[string]*schema.Schema{
-									"name": &schema.Schema{
-										Type:     schema.TypeString,
-										Required: true,
-									},
-									"target": &schema.Schema{
-										Type:     schema.TypeFloat,
-										Required: true,
-									},
-
-									"type": &schema.Schema{
-										Type:     schema.TypeString,
-										Required: true,
-									},
-								},
-							},
-						},
-
-						"load_balancing_utilization": &schema.Schema{
-							Type:     schema.TypeList,
-							Optional: true,
-							Elem: &schema.Resource{
-								Schema: map[string]*schema.Schema{
-									"target": &schema.Schema{
-										Type:     schema.TypeFloat,
-										Required: true,
-									},
-								},
-							},
-						},
-					},
-				},
-			},
+			"autoscaling_policy": autoscalingPolicy,
 
 			"description": &schema.Schema{
 				Type:     schema.TypeString,
@@ -117,6 +123,7 @@ func resourceComputeAutoscaler() *schema.Resource {
 			"project": &schema.Schema{
 				Type:     schema.TypeString,
 				Optional: true,
+				Computed: true,
 				ForceNew: true,
 			},
 
@@ -140,11 +147,8 @@ func buildAutoscaler(d *schema.ResourceData) (*compute.Autoscaler, error) {
 		scaler.Description = v.(string)
 	}
 
-	aspCount := d.Get("autoscaling_policy.#").(int)
-	if aspCount != 1 {
-		return nil, fmt.Errorf("The autoscaler must have exactly one autoscaling_policy, found %d.", aspCount)
-	}
-
+	// You can only have 0 or 1 autoscaling policy per autoscaler, but HCL can't easily express
+	// "optional object", so instead we have "list of maximum size 1".
 	prefix := "autoscaling_policy.0."
 
 	scaler.AutoscalingPolicy = &compute.AutoscalingPolicy{
@@ -153,41 +157,29 @@ func buildAutoscaler(d *schema.ResourceData) (*compute.Autoscaler, error) {
 		CoolDownPeriodSec: int64(d.Get(prefix + "cooldown_period").(int)),
 	}
 
-	// Check that only one autoscaling policy is defined
-
-	policyCounter := 0
+	// This list is MaxItems = 1 as well - you can only have 0 or 1 cpu utilization target per autoscaler.
 	if _, ok := d.GetOk(prefix + "cpu_utilization"); ok {
 		if d.Get(prefix+"cpu_utilization.0.target").(float64) != 0 {
-			cpuUtilCount := d.Get(prefix + "cpu_utilization.#").(int)
-			if cpuUtilCount != 1 {
-				return nil, fmt.Errorf("The autoscaling_policy must have exactly one cpu_utilization, found %d.", cpuUtilCount)
-			}
-			policyCounter++
 			scaler.AutoscalingPolicy.CpuUtilization = &compute.AutoscalingPolicyCpuUtilization{
 				UtilizationTarget: d.Get(prefix + "cpu_utilization.0.target").(float64),
 			}
 		}
 	}
-	if _, ok := d.GetOk("autoscaling_policy.0.metric"); ok {
-		if d.Get(prefix+"metric.0.name") != "" {
-			policyCounter++
-			metricCount := d.Get(prefix + "metric.#").(int)
-			if metricCount != 1 {
-				return nil, fmt.Errorf("The autoscaling_policy must have exactly one metric, found %d.", metricCount)
-			}
-			scaler.AutoscalingPolicy.CustomMetricUtilizations = []*compute.AutoscalingPolicyCustomMetricUtilization{
-				{
-					Metric:                d.Get(prefix + "metric.0.name").(string),
-					UtilizationTarget:     d.Get(prefix + "metric.0.target").(float64),
-					UtilizationTargetType: d.Get(prefix + "metric.0.type").(string),
-				},
+	var customMetrics []*compute.AutoscalingPolicyCustomMetricUtilization
+	if metricCount, ok := d.GetOk(prefix + "metric.#"); ok {
+		for m := 0; m < metricCount.(int); m++ {
+			if d.Get(fmt.Sprintf("%smetric.%d.name", prefix, m)) != "" {
+				customMetrics = append(customMetrics, &compute.AutoscalingPolicyCustomMetricUtilization{
+					Metric:                d.Get(fmt.Sprintf("%smetric.%d.name", prefix, m)).(string),
+					UtilizationTarget:     d.Get(fmt.Sprintf("%smetric.%d.target", prefix, m)).(float64),
+					UtilizationTargetType: d.Get(fmt.Sprintf("%smetric.%d.type", prefix, m)).(string),
+				})
 			}
 		}
-
 	}
+	scaler.AutoscalingPolicy.CustomMetricUtilizations = customMetrics
 	if _, ok := d.GetOk("autoscaling_policy.0.load_balancing_utilization"); ok {
 		if d.Get(prefix+"load_balancing_utilization.0.target").(float64) != 0 {
-			policyCounter++
 			lbuCount := d.Get(prefix + "load_balancing_utilization.#").(int)
 			if lbuCount != 1 {
 				return nil, fmt.Errorf("The autoscaling_policy must have exactly one load_balancing_utilization, found %d.", lbuCount)
@@ -196,10 +188,6 @@ func buildAutoscaler(d *schema.ResourceData) (*compute.Autoscaler, error) {
 				UtilizationTarget: d.Get(prefix + "load_balancing_utilization.0.target").(float64),
 			}
 		}
-	}
-
-	if policyCounter != 1 {
-		return nil, fmt.Errorf("One policy must be defined for an autoscaler.")
 	}
 
 	return scaler, nil
@@ -214,12 +202,16 @@ func resourceComputeAutoscalerCreate(d *schema.ResourceData, meta interface{}) e
 	}
 
 	// Get the zone
-	log.Printf("[DEBUG] Loading zone: %s", d.Get("zone").(string))
+	z, err := getZone(d, config)
+	if err != nil {
+		return err
+	}
+	log.Printf("[DEBUG] Loading zone: %s", z)
 	zone, err := config.clientCompute.Zones.Get(
-		project, d.Get("zone").(string)).Do()
+		project, z).Do()
 	if err != nil {
 		return fmt.Errorf(
-			"Error loading zone '%s': %s", d.Get("zone").(string), err)
+			"Error loading zone '%s': %s", z, err)
 	}
 
 	scaler, err := buildAutoscaler(d)
@@ -236,7 +228,7 @@ func resourceComputeAutoscalerCreate(d *schema.ResourceData, meta interface{}) e
 	// It probably maybe worked, so store the ID now
 	d.SetId(scaler.Name)
 
-	err = computeOperationWait(config, op, project, "Creating Autoscaler")
+	err = computeOperationWait(config.clientCompute, op, project, "Creating Autoscaler")
 	if err != nil {
 		return err
 	}
@@ -269,6 +261,8 @@ func flattenAutoscalingPolicy(policy *compute.AutoscalingPolicy) []map[string]in
 		for _, customMetricUtilization := range policy.CustomMetricUtilizations {
 			metricUtil := make(map[string]interface{})
 			metricUtil["target"] = customMetricUtilization.UtilizationTarget
+			metricUtil["name"] = customMetricUtilization.Metric
+			metricUtil["type"] = customMetricUtilization.UtilizationTargetType
 			metricUtils = append(metricUtils, metricUtil)
 		}
 		policyMap["metric"] = metricUtils
@@ -296,8 +290,8 @@ func resourceComputeAutoscalerRead(d *schema.ResourceData, meta interface{}) err
 
 	var scaler *compute.Autoscaler
 	var e error
-	if zone, ok := d.GetOk("zone"); ok {
-		scaler, e = config.clientCompute.Autoscalers.Get(project, zone.(string), d.Id()).Do()
+	if zone, _ := getZone(d, config); zone != "" {
+		scaler, e = config.clientCompute.Autoscalers.Get(project, zone, d.Id()).Do()
 		if e != nil {
 			return handleNotFoundError(e, d, fmt.Sprintf("Autoscaler %q", d.Id()))
 		}
@@ -320,11 +314,11 @@ func resourceComputeAutoscalerRead(d *schema.ResourceData, meta interface{}) err
 		return nil
 	}
 
-	zoneUrl := strings.Split(scaler.Zone, "/")
+	d.Set("project", project)
 	d.Set("self_link", scaler.SelfLink)
 	d.Set("name", scaler.Name)
 	d.Set("target", scaler.Target)
-	d.Set("zone", zoneUrl[len(zoneUrl)-1])
+	d.Set("zone", GetResourceNameFromSelfLink(scaler.Zone))
 	d.Set("description", scaler.Description)
 	if scaler.AutoscalingPolicy != nil {
 		d.Set("autoscaling_policy", flattenAutoscalingPolicy(scaler.AutoscalingPolicy))
@@ -341,7 +335,10 @@ func resourceComputeAutoscalerUpdate(d *schema.ResourceData, meta interface{}) e
 		return err
 	}
 
-	zone := d.Get("zone").(string)
+	zone, err := getZone(d, config)
+	if err != nil {
+		return err
+	}
 
 	scaler, err := buildAutoscaler(d)
 	if err != nil {
@@ -357,7 +354,7 @@ func resourceComputeAutoscalerUpdate(d *schema.ResourceData, meta interface{}) e
 	// It probably maybe worked, so store the ID now
 	d.SetId(scaler.Name)
 
-	err = computeOperationWait(config, op, project, "Updating Autoscaler")
+	err = computeOperationWait(config.clientCompute, op, project, "Updating Autoscaler")
 	if err != nil {
 		return err
 	}
@@ -373,14 +370,17 @@ func resourceComputeAutoscalerDelete(d *schema.ResourceData, meta interface{}) e
 		return err
 	}
 
-	zone := d.Get("zone").(string)
+	zone, err := getZone(d, config)
+	if err != nil {
+		return err
+	}
 	op, err := config.clientCompute.Autoscalers.Delete(
 		project, zone, d.Id()).Do()
 	if err != nil {
 		return fmt.Errorf("Error deleting autoscaler: %s", err)
 	}
 
-	err = computeOperationWait(config, op, project, "Deleting Autoscaler")
+	err = computeOperationWait(config.clientCompute, op, project, "Deleting Autoscaler")
 	if err != nil {
 		return err
 	}

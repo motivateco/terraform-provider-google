@@ -6,7 +6,6 @@ description: |-
   Manages a VM instance template resource within GCE.
 ---
 
-
 # google\_compute\_instance\_template
 
 Manages a VM instance template resource within GCE. For more information see
@@ -23,6 +22,10 @@ resource "google_compute_instance_template" "default" {
   description = "This template is used to create app server instances."
 
   tags = ["foo", "bar"]
+
+  labels = {
+    environment = "dev"
+  }
 
   instance_description = "description assigned to instances"
   machine_type         = "n1-standard-1"
@@ -118,6 +121,10 @@ The following arguments are supported:
 
 * `machine_type` - (Required) The machine type to create.
 
+    **Note:** If you want to update this value (resize the VM) after initial creation, you must set [`allow_stopping_for_update`](#allow_stopping_for_update) to `true`.
+
+    To create a machine with a [custom type][custom-vm-types] (such as extended memory), format the value like `custom-VCPUS-MEM_IN_MB` like `custom-6-20480` for 6 vCPU and 20GB of RAM.
+
 - - -
 * `name` - (Optional) The name of the instance template. If you leave
   this blank, Terraform will auto-generate a unique name.
@@ -133,6 +140,9 @@ The following arguments are supported:
 * `instance_description` - (Optional) A brief description to use for instances
     created from this template.
 
+* `labels` - (Optional) A set of key/value label pairs to assign to instances
+    created from this template,
+
 * `metadata` - (Optional) Metadata key/value pairs to make available from
     within instances created from this template.
 
@@ -145,7 +155,7 @@ The following arguments are supported:
     this template. This can be specified multiple times for multiple networks.
     Structure is documented below.
 
-* `project` - (Optional) The project in which the resource belongs. If it
+* `project` - (Optional) The ID of the project in which the resource belongs. If it
     is not provided, the provider project is used.
 
 * `region` - (Optional) An instance template is a global resource that is not
@@ -161,6 +171,11 @@ The following arguments are supported:
 * `service_account` - (Optional) Service account to attach to the instance. Structure is documented below.
 
 * `tags` - (Optional) Tags to attach to the instance.
+
+* `guest_accelerator` - (Optional) List of the type and count of accelerator cards attached to the instance. Structure documented below.
+
+* `min_cpu_platform` - (Optional) Specifies a minimum CPU platform. Applicable values are the friendly names of CPU platforms, such as
+`Intel Haswell` or `Intel Skylake`. See the complete list [here](https://cloud.google.com/compute/docs/instances/specify-min-cpu-platform).
 
 The `disk` block supports:
 
@@ -212,8 +227,11 @@ The `network_interface` block supports:
     to. The subnetwork must exist in the same `region` this instance will be
     created in. Either `network` or `subnetwork` must be provided.
 
-* `subnetwork_project` - (Optional) The project in which the subnetwork belongs.
+* `subnetwork_project` - (Optional) The ID of the project in which the subnetwork belongs.
     If it is not provided, the provider project is used.
+
+* `address` - (Optional) The private IP address to assign to the instance. If
+    empty, the address will be automatically assigned.
 
 * `access_config` - (Optional) Access configurations, i.e. IPs via which this
     instance can be accessed via the Internet. Omit to ensure that the instance
@@ -222,10 +240,26 @@ The `network_interface` block supports:
     network (e.g. via tunnel or because it is running on another cloud instance
     on that network). This block can be repeated multiple times. Structure documented below.
 
+* `alias_ip_range` - (Optional) An
+    array of alias IP ranges for this network interface. Can only be specified for network
+    interfaces on subnet-mode networks. Structure documented below.
+
 The `access_config` block supports:
 
 * `nat_ip` - (Optional) The IP address that will be 1:1 mapped to the instance's
     network ip. If not given, one will be generated.
+
+The `alias_ip_range` block supports:
+
+* `ip_cidr_range` - The IP CIDR range represented by this alias IP range. This IP CIDR range
+    must belong to the specified subnetwork and cannot contain IP addresses reserved by
+    system or used by other network interfaces. At the time of writing only a
+    netmask (e.g. /24) may be supplied, with a CIDR format resulting in an API
+    error.
+
+* `subnetwork_range_name` - (Optional) The subnetwork secondary range name specifying
+    the secondary range from which to allocate the IP CIDR range for this alias IP
+    range. If left unspecified, the primary range of the subnetwork will be used.
 
 The `service_account` block supports:
 
@@ -233,7 +267,8 @@ The `service_account` block supports:
     default Google Compute Engine service account is used.
 
 * `scopes` - (Required) A list of service scopes. Both OAuth2 URLs and gcloud
-    short names are supported.
+    short names are supported. To allow full access to all Cloud APIs, use the
+    `cloud-platform` scope. See a complete list of scopes [here](https://cloud.google.com/sdk/gcloud/reference/alpha/compute/instances/set-scopes#--scopes).
 
 The `scheduling` block supports:
 
@@ -247,6 +282,12 @@ The `scheduling` block supports:
 * `preemptible` - (Optional) Allows instance to be preempted. This defaults to
     false. Read more on this
     [here](https://cloud.google.com/compute/docs/instances/preemptible).
+
+The `guest_accelerator` block supports:
+
+* `type` (Required) - The accelerator type resource to expose to this instance. E.g. `nvidia-tesla-k80`.
+
+* `count` (Required) - The number of the guest accelerator cards exposed to this instance.
 
 ## Attributes Reference
 
@@ -269,3 +310,5 @@ Instance templates can be imported using the `name`, e.g.
 ```
 $ terraform import google_compute_instance_template.default appserver-template
 ```
+
+[custom-vm-types]: https://cloud.google.com/dataproc/docs/concepts/compute/custom-machine-types

@@ -9,8 +9,7 @@ description: |-
 # google\_sql\_database\_instance
 
 Creates a new Google SQL Database Instance. For more information, see the [official documentation](https://cloud.google.com/sql/),
-or the [JSON API](https://cloud.google.com/sql/docs/admin-api/v1beta4/instances). Postgres support
-for `google_sql_database_instance` is in [Beta](/docs/providers/google/index.html#beta-features).
+or the [JSON API](https://cloud.google.com/sql/docs/admin-api/v1beta4/instances).
 
 ~> **NOTE on `google_sql_database_instance`:** - Second-generation instances include a
 default 'root'@'%' user with no password. This user will be deleted by Terraform on
@@ -19,14 +18,35 @@ a restricted host and strong password.
 
 ## Example Usage
 
-Example creating a SQL Database.
+### SQL First Generation
 
 ```hcl
 resource "google_sql_database_instance" "master" {
   name = "master-instance"
+  database_version = "MYSQL_5_6"
+  # First-generation instance regions are not the conventional
+  # Google Compute Engine regions. See argument reference below.
+  region = "us-central"
 
   settings {
     tier = "D0"
+  }
+}
+```
+
+
+### SQL Second generation
+
+```hcl
+resource "google_sql_database_instance" "master" {
+  name = "master-instance"
+  database_version = "POSTGRES_9_6"
+  region = "us-central1"
+
+  settings {
+    # Second-generation instance tiers are based on the machine
+    # type. See argument reference below.
+    tier = "db-f1-micro"
   }
 }
 ```
@@ -35,9 +55,13 @@ resource "google_sql_database_instance" "master" {
 
 The following arguments are supported:
 
-* `region` - (Required) The region the instance will sit in. Note, this does
-    not line up with the Google Compute Engine (GCE) regions - your options are
-    `us-central`, `asia-west1`, `europe-west1`, and `us-east1`.
+* `region` - (Required) The region the instance will sit in. Note, first-generation Cloud SQL instance
+    regions do not line up with the Google Compute Engine (GCE) regions, and Cloud SQL is not
+    available in all regions - choose from one of the options listed [here](https://cloud.google.com/sql/docs/mysql/instance-locations).
+    A valid region must be provided to use this resource. If a region is not provided in the resource definition,
+    the provider region will be used instead, but this will be an apply-time error for all first-generation
+    instances *and* for second-generation instances if the provider region is not supported with Cloud SQL.
+    If you choose not to provide the `region` argument for this resource, make sure you understand this.
 
 * `settings` - (Required) The settings to use for the database. The
     configuration is detailed below.
@@ -61,7 +85,7 @@ The following arguments are supported:
     the master in the replication setup. Note, this requires the master to have
     `binary_log_enabled` set, as well as existing backups.
 
-* `project` - (Optional) The project in which the resource belongs. If it
+* `project` - (Optional) The ID of the project in which the resource belongs. If it
     is not provided, the provider project is used.
 
 * `replica_configuration` - (Optional) The configuration for replication. The
@@ -82,6 +106,9 @@ The required `settings` block supports:
 * `authorized_gae_applications` - (Optional) A list of Google App Engine (GAE)
     project names that are allowed to access this instance.
 
+* `availability_type` - (Optional) This specifies whether a PostgreSQL instance
+    should be set up for high availability (`REGIONAL`) or single zone (`ZONAL`).
+
 * `crash_safe_replication` - (Optional) Specific to read instances, indicates
     when crash-safe replication flags are enabled.
 
@@ -96,6 +123,8 @@ The required `settings` block supports:
 
 * `replication_type` - (Optional) Replication type for this instance, can be one
     of `ASYNCHRONOUS` or `SYNCHRONOUS`.
+
+* `user_labels` - (Optional) A set of key/value user label pairs to assign to the instance.
 
 The optional `settings.database_flags` sublist supports:
 
@@ -142,7 +171,7 @@ The optional `settings.location_preference` subblock supports:
 
 The optional `settings.maintenance_window` subblock for Second Generation
 instances declares a one-hour [maintenance window](https://cloud.google.com/sql/docs/instance-settings?hl=en#maintenance-window-2ndgen)
-when an Instance can automatically restart to apply updates. It supports:
+when an Instance can automatically restart to apply updates. The maintenance window is specified in UTC time. It supports:
 
 * `day` - (Optional) Day of week (`1-7`), starting on Monday
 
@@ -191,6 +220,10 @@ to work, cannot be updated, and supports:
 In addition to the arguments listed above, the following computed attributes are
 exported:
 
+* `first_ip_address` - The first IPv4 address of the addresses assigned. This is
+is to support accessing the [first address in the list in a terraform output](https://github.com/terraform-providers/terraform-provider-google/issues/912)
+when the resource is configured with a `count`.
+
 * `ip_address.0.ip_address` - The IPv4 address assigned.
 
 * `ip_address.0.time_to_retire` - The time this IP address will be retired, in RFC
@@ -200,6 +233,26 @@ exported:
 
 * `settings.version` - Used to make sure changes to the `settings` block are
     atomic.
+    
+* `server_ca_cert.0.cert` - The CA Certificate used to connect to the SQL Instance via SSL.
+
+* `server_ca_cert.0.common_name` - The CN valid for the CA Cert.
+
+* `server_ca_cert.0.create_time` - Creation time of the CA Cert.
+
+* `server_ca_cert.0.expiration_time` - Expiration time of the CA Cert.
+
+* `server_ca_cert.0.sha1_fingerprint` - SHA Fingerprint of the CA Cert.
+
+
+## Timeouts
+
+`google_sql_database_instance` provides the following
+[Timeouts](/docs/configuration/resources.html#timeouts) configuration options:
+
+- `create` - Default is 10 minutes.
+- `update` - Default is 10 minutes.
+- `delete` - Default is 10 minutes.
 
 ## Import
 

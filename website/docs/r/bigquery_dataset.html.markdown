@@ -36,7 +36,7 @@ The following arguments are supported:
 * `dataset_id` - (Required) A unique ID for the resource.
     Changing this forces a new resource to be created.
 
-* `project` - (Optional) The project in which the resource belongs. If it
+* `project` - (Optional) The ID of the project in which the resource belongs. If it
     is not provided, the provider project is used.
 
 * `friendly_name` - (Optional) A descriptive name for the dataset.
@@ -44,9 +44,17 @@ The following arguments are supported:
 * `description` - (Optional) A user-friendly description of the dataset.
 
 * `location` - (Optional) The geographic location where the dataset should reside.
+    See [official docs](https://cloud.google.com/bigquery/docs/dataset-locations).
 
-    Possible values include `EU` and `US`. The default value is `US`.
+    There are two types of locations, regional or multi-regional.
+    A regional location is a specific geographic place, such as Tokyo, and a
+    multi-regional location is a large geographic area, such as the United States,
+    that contains at least two geographic places
 
+    Possible regional values include: `asia-northeast1`
+    Possible multi-regional values:`EU` and `US`.
+
+    The default value is multi-regional location `US`.
     Changing this forces a new resource to be created.
 
 * `default_table_expiration_ms` - (Optional) The default lifetime of all

@@ -11,6 +11,8 @@ import (
 )
 
 func TestAccDnsManagedZone_basic(t *testing.T) {
+	t.Parallel()
+
 	var zone dns.ManagedZone
 
 	resource.Test(t, resource.TestCase{
@@ -19,7 +21,7 @@ func TestAccDnsManagedZone_basic(t *testing.T) {
 		CheckDestroy: testAccCheckDnsManagedZoneDestroy,
 		Steps: []resource.TestStep{
 			resource.TestStep{
-				Config: testAccDnsManagedZone_basic,
+				Config: testAccDnsManagedZone_basic(),
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheckDnsManagedZoneExists(
 						"google_dns_managed_zone.foobar", &zone),
@@ -76,8 +78,10 @@ func testAccCheckDnsManagedZoneExists(n string, zone *dns.ManagedZone) resource.
 	}
 }
 
-var testAccDnsManagedZone_basic = fmt.Sprintf(`
+func testAccDnsManagedZone_basic() string {
+	return fmt.Sprintf(`
 resource "google_dns_managed_zone" "foobar" {
 	name = "mzone-test-%s"
-	dns_name = "hashicorptest.com."
-}`, acctest.RandString(10))
+	dns_name = "tf-acctest-%s.hashicorptest.com."
+}`, acctest.RandString(10), acctest.RandString(10))
+}

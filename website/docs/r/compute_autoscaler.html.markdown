@@ -15,7 +15,7 @@ when the need for resources is lower. You just define the autoscaling policy and
 the autoscaler performs automatic scaling based on the measured load. For more
 information, see [the official
 documentation](https://cloud.google.com/compute/docs/autoscaler/) and
-[API](https://cloud.google.com/compute/docs/autoscaler/v1beta2/autoscalers)
+[API](https://cloud.google.com/compute/docs/reference/latest/autoscalers)
 
 
 ## Example Usage
@@ -94,7 +94,7 @@ The following arguments are supported:
 * `description` - (Optional) An optional textual description of the instance
     group manager.
 
-* `project` - (Optional) The project in which the resource belongs. If it
+* `project` - (Optional) The ID of the project in which the resource belongs. If it
     is not provided, the provider project is used.
 
 The `autoscaling_policy` block contains:

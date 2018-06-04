@@ -8,13 +8,15 @@ import (
 	"github.com/hashicorp/terraform/helper/resource"
 )
 
-func TestAccGoogleSqlDatabase_importBasic(t *testing.T) {
+func TestAccSqlDatabase_importBasic(t *testing.T) {
+	t.Parallel()
+
 	resourceName := "google_sql_database.database"
 
 	resource.Test(t, resource.TestCase{
 		PreCheck:     func() { testAccPreCheck(t) },
 		Providers:    testAccProviders,
-		CheckDestroy: testAccGoogleSqlDatabaseInstanceDestroy,
+		CheckDestroy: testAccSqlDatabaseInstanceDestroy,
 		Steps: []resource.TestStep{
 			resource.TestStep{
 				Config: fmt.Sprintf(

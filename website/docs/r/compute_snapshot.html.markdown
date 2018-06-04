@@ -17,9 +17,13 @@ and
 
 ```js
 resource "google_compute_snapshot" "default" {
-  name  = "test-snapshot"
-  source_disk  = "test-disk"
-  zone  = "us-central1-a"
+  name        = "test-snapshot"
+  source_disk = "test-disk"
+  zone        = "us-central1-a"
+
+  labels {
+    my-label = "my-label-value"
+  }
 }
 ```
 
@@ -46,8 +50,10 @@ The following arguments are supported:
     encoded in [RFC 4648 base64](https://tools.ietf.org/html/rfc4648#section-4)
     to encrypt this snapshot.
 
-* `project` - (Optional) The project in which the resource belongs. If it
+* `project` - (Optional) The ID of the project in which the resource belongs. If it
     is not provided, the provider project is used.
+
+* `labels` - (Optional) A set of key/value label pairs to assign to the snapshot.
 
 ## Attributes Reference
 
@@ -67,3 +73,5 @@ exported:
 * `source_disk_link` - The URI of the source disk.
 
 * `self_link` - The URI of the created resource.
+
+* `label_fingerprint` - The unique fingerprint of the labels.

@@ -109,7 +109,7 @@ The following arguments are supported:
 
 * `path_matcher` - (Optional) A list of paths to match. Structure is documented below.
 
-* `project` - (Optional) The project in which the resource belongs. If it
+* `project` - (Optional) The ID of the project in which the resource belongs. If it
     is not provided, the provider project is used.
 
 * `test` - (Optional) The test to perform.  Multiple blocks of this type are permitted. Structure is documented below.
@@ -142,7 +142,7 @@ The `path_rule` block supports:
 
 The `test` block supports:
 
-* `service` - (Required) The backend service or backend bucket that should be matched by this test.
+* `service` - (Required) The backend service or backend bucket link that should be matched by this test.
 
 * `host` - (Required) The host component of the URL being tested.
 
@@ -157,6 +157,17 @@ exported:
 
 * `fingerprint` - The unique fingerprint for this resource.
 
-* `id` - The GCE assigned ID of the resource.
+* `map_id` - The GCE assigned ID of the resource.
 
 * `self_link` - The URI of the created resource.
+
+## Import
+
+URL Map can be imported using the `name`, e.g.
+
+```
+$ terraform import google_compute_url_map.html.foobar foobar
+```
+
+
+Currently `host_rule`, `path_matcher` and `test` importing is not yet supported.

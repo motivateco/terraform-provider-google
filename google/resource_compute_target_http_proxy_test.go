@@ -10,6 +10,8 @@ import (
 )
 
 func TestAccComputeTargetHttpProxy_basic(t *testing.T) {
+	t.Parallel()
+
 	target := fmt.Sprintf("thttp-test-%s", acctest.RandString(10))
 	backend := fmt.Sprintf("thttp-test-%s", acctest.RandString(10))
 	hc := fmt.Sprintf("thttp-test-%s", acctest.RandString(10))
@@ -28,11 +30,18 @@ func TestAccComputeTargetHttpProxy_basic(t *testing.T) {
 						"google_compute_target_http_proxy.foobar"),
 				),
 			},
+			resource.TestStep{
+				ResourceName:      "google_compute_target_http_proxy.foobar",
+				ImportState:       true,
+				ImportStateVerify: true,
+			},
 		},
 	})
 }
 
 func TestAccComputeTargetHttpProxy_update(t *testing.T) {
+	t.Parallel()
+
 	target := fmt.Sprintf("thttp-test-%s", acctest.RandString(10))
 	backend := fmt.Sprintf("thttp-test-%s", acctest.RandString(10))
 	hc := fmt.Sprintf("thttp-test-%s", acctest.RandString(10))

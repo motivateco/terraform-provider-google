@@ -10,7 +10,9 @@ import (
 	"github.com/hashicorp/terraform/terraform"
 )
 
-func TestAccGoogleContainerEngineVersions_basic(t *testing.T) {
+func TestAccContainerEngineVersions_basic(t *testing.T) {
+	t.Parallel()
+
 	resource.Test(t, resource.TestCase{
 		PreCheck:  func() { testAccPreCheck(t) },
 		Providers: testAccProviders,
@@ -84,6 +86,11 @@ func testAccCheckGoogleContainerEngineVersionsMeta(n string) resource.TestCheckF
 			if len(v) < 1 {
 				return fmt.Errorf("Empty master version (%q), this is definitely a bug", idx)
 			}
+		}
+
+		_, ok = rs.Primary.Attributes["default_cluster_version"]
+		if !ok {
+			return errors.New("Didn't get a default cluster version.")
 		}
 
 		return nil

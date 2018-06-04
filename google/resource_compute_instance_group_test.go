@@ -12,6 +12,8 @@ import (
 )
 
 func TestAccComputeInstanceGroup_basic(t *testing.T) {
+	t.Parallel()
+
 	var instanceGroup compute.InstanceGroup
 	var instanceName = fmt.Sprintf("instancegroup-test-%s", acctest.RandString(10))
 
@@ -29,11 +31,49 @@ func TestAccComputeInstanceGroup_basic(t *testing.T) {
 						"google_compute_instance_group.empty", &instanceGroup),
 				),
 			},
+			{
+				ResourceName:      "google_compute_instance_group.basic",
+				ImportState:       true,
+				ImportStateVerify: true,
+			},
+		},
+	})
+}
+
+func TestAccComputeInstanceGroup_recreatedInstances(t *testing.T) {
+	t.Parallel()
+
+	var instanceGroup compute.InstanceGroup
+	var instanceName = fmt.Sprintf("instancegroup-test-%s", acctest.RandString(10))
+
+	resource.Test(t, resource.TestCase{
+		PreCheck:     func() { testAccPreCheck(t) },
+		Providers:    testAccProviders,
+		CheckDestroy: testAccComputeInstanceGroup_destroy,
+		Steps: []resource.TestStep{
+			{
+				Config: testAccComputeInstanceGroup_update(instanceName),
+				Check: resource.ComposeTestCheckFunc(
+					testAccComputeInstanceGroup_exists(
+						"google_compute_instance_group.update", &instanceGroup),
+				),
+			},
+			{
+				Config: testAccComputeInstanceGroup_recreateInstances(instanceName),
+				Check: resource.ComposeTestCheckFunc(
+					testAccComputeInstanceGroup_exists(
+						"google_compute_instance_group.update", &instanceGroup),
+					testAccComputeInstanceGroup_updated(
+						"google_compute_instance_group.update", 2, &instanceGroup),
+				),
+			},
 		},
 	})
 }
 
 func TestAccComputeInstanceGroup_update(t *testing.T) {
+	t.Parallel()
+
 	var instanceGroup compute.InstanceGroup
 	var instanceName = fmt.Sprintf("instancegroup-test-%s", acctest.RandString(10))
 
@@ -71,6 +111,8 @@ func TestAccComputeInstanceGroup_update(t *testing.T) {
 }
 
 func TestAccComputeInstanceGroup_outOfOrderInstances(t *testing.T) {
+	t.Parallel()
+
 	var instanceGroup compute.InstanceGroup
 	var instanceName = fmt.Sprintf("instancegroup-test-%s", acctest.RandString(10))
 
@@ -91,6 +133,8 @@ func TestAccComputeInstanceGroup_outOfOrderInstances(t *testing.T) {
 }
 
 func TestAccComputeInstanceGroup_network(t *testing.T) {
+	t.Parallel()
+
 	var instanceGroup compute.InstanceGroup
 	var instanceName = fmt.Sprintf("instancegroup-test-%s", acctest.RandString(10))
 
@@ -269,8 +313,10 @@ func testAccComputeInstanceGroup_basic(instance string) string {
 		can_ip_forward = false
 		zone = "us-central1-c"
 
-		disk {
-			image = "debian-8-jessie-v20160803"
+		boot_disk {
+			initialize_params {
+				image = "debian-8-jessie-v20160803"
+			}
 		}
 
 		network_interface {
@@ -317,8 +363,10 @@ func testAccComputeInstanceGroup_update(instance string) string {
 		zone = "us-central1-c"
 		count = 2
 
-		disk {
-			image = "debian-8-jessie-v20160803"
+		boot_disk {
+			initialize_params {
+				image = "debian-8-jessie-v20160803"
+			}
 		}
 
 		network_interface {
@@ -352,8 +400,10 @@ func testAccComputeInstanceGroup_update2(instance string) string {
 		zone = "us-central1-c"
 		count = 1
 
-		disk {
-			image = "debian-8-jessie-v20160803"
+		boot_disk {
+			initialize_params {
+				image = "debian-8-jessie-v20160803"
+			}
 		}
 
 		network_interface {
@@ -378,6 +428,44 @@ func testAccComputeInstanceGroup_update2(instance string) string {
 	}`, instance, instance)
 }
 
+func testAccComputeInstanceGroup_recreateInstances(instance string) string {
+	return fmt.Sprintf(`
+	resource "google_compute_instance" "ig_instance" {
+		name = "%s-${count.index}"
+		machine_type = "n1-standard-1"
+		can_ip_forward = false
+		zone = "us-central1-c"
+		count = 2
+
+		boot_disk {
+			initialize_params {
+				image = "debian-8-jessie-v20160803"
+			}
+		}
+
+		metadata_startup_script = "echo 'foo'"
+
+		network_interface {
+			network = "default"
+		}
+	}
+
+	resource "google_compute_instance_group" "update" {
+		description = "Terraform test instance group"
+		name = "%s"
+		zone = "us-central1-c"
+		instances = [ "${google_compute_instance.ig_instance.*.self_link}" ]
+		named_port {
+			name = "http"
+			port = "8080"
+		}
+		named_port {
+			name = "https"
+			port = "8443"
+		}
+	}`, instance, instance)
+}
+
 func testAccComputeInstanceGroup_outOfOrderInstances(instance string) string {
 	return fmt.Sprintf(`
 	resource "google_compute_instance" "ig_instance" {
@@ -386,8 +474,10 @@ func testAccComputeInstanceGroup_outOfOrderInstances(instance string) string {
 		can_ip_forward = false
 		zone = "us-central1-c"
 
-		disk {
-			image = "debian-8-jessie-v20160803"
+		boot_disk {
+			initialize_params {
+				image = "debian-8-jessie-v20160803"
+			}
 		}
 
 		network_interface {
@@ -401,8 +491,10 @@ func testAccComputeInstanceGroup_outOfOrderInstances(instance string) string {
 		can_ip_forward = false
 		zone = "us-central1-c"
 
-		disk {
-			image = "debian-8-jessie-v20160803"
+		boot_disk {
+			initialize_params {
+				image = "debian-8-jessie-v20160803"
+			}
 		}
 
 		network_interface {
@@ -439,8 +531,10 @@ func testAccComputeInstanceGroup_network(instance string) string {
 		can_ip_forward = false
 		zone = "us-central1-c"
 
-		disk {
-			image = "debian-8-jessie-v20160803"
+		boot_disk {
+			initialize_params {
+				image = "debian-8-jessie-v20160803"
+			}
 		}
 
 		network_interface {

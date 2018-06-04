@@ -8,10 +8,15 @@ import (
 	"github.com/hashicorp/terraform/helper/resource"
 	"github.com/hashicorp/terraform/terraform"
 	"google.golang.org/api/compute/v1"
-	"regexp"
+)
+
+const (
+	canonicalSslCertificateTemplate = "https://www.googleapis.com/compute/v1/projects/%s/global/sslCertificates/%s"
 )
 
 func TestAccComputeTargetHttpsProxy_basic(t *testing.T) {
+	t.Parallel()
+
 	var proxy compute.TargetHttpsProxy
 	resourceSuffix := acctest.RandString(10)
 
@@ -29,11 +34,18 @@ func TestAccComputeTargetHttpsProxy_basic(t *testing.T) {
 					testAccComputeTargetHttpsProxyHasSslCertificate("httpsproxy-test-cert1-"+resourceSuffix, &proxy),
 				),
 			},
+			resource.TestStep{
+				ResourceName:      "google_compute_target_https_proxy.foobar",
+				ImportState:       true,
+				ImportStateVerify: true,
+			},
 		},
 	})
 }
 
 func TestAccComputeTargetHttpsProxy_update(t *testing.T) {
+	t.Parallel()
+
 	var proxy compute.TargetHttpsProxy
 	resourceSuffix := acctest.RandString(10)
 
@@ -57,26 +69,10 @@ func TestAccComputeTargetHttpsProxy_update(t *testing.T) {
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheckComputeTargetHttpsProxyExists(
 						"google_compute_target_https_proxy.foobar", &proxy),
-					testAccComputeTargetHttpsProxyDescription("Resource created for Terraform acceptance testing (updated)", &proxy),
+					testAccComputeTargetHttpsProxyDescription("Resource created for Terraform acceptance testing", &proxy),
 					testAccComputeTargetHttpsProxyHasSslCertificate("httpsproxy-test-cert1-"+resourceSuffix, &proxy),
 					testAccComputeTargetHttpsProxyHasSslCertificate("httpsproxy-test-cert2-"+resourceSuffix, &proxy),
 				),
-			},
-		},
-	})
-}
-
-func TestAccComputeTargetHttpsProxy_invalidCertificate(t *testing.T) {
-	resourceSuffix := acctest.RandString(10)
-
-	resource.Test(t, resource.TestCase{
-		PreCheck:     func() { testAccPreCheck(t) },
-		Providers:    testAccProviders,
-		CheckDestroy: testAccCheckComputeTargetHttpsProxyDestroy,
-		Steps: []resource.TestStep{
-			resource.TestStep{
-				Config:      testAccComputeTargetHttpsProxy_invalidCertificate(resourceSuffix),
-				ExpectError: regexp.MustCompile("ssl_certificate"),
 			},
 		},
 	})
@@ -160,6 +156,7 @@ resource "google_compute_target_https_proxy" "foobar" {
 	name = "httpsproxy-test-%s"
 	url_map = "${google_compute_url_map.foobar.self_link}"
 	ssl_certificates = ["${google_compute_ssl_certificate.foobar1.self_link}"]
+	ssl_policy = "${google_compute_ssl_policy.foobar.self_link}"
 }
 
 resource "google_compute_backend_service" "foobar" {
@@ -196,6 +193,13 @@ resource "google_compute_url_map" "foobar" {
 	}
 }
 
+resource "google_compute_ssl_policy" "foobar" {
+	name            = "sslproxy-test-%s"
+	description     = "my-description"
+	min_tls_version = "TLS_1_2"
+	profile         = "MODERN"
+}
+
 resource "google_compute_ssl_certificate" "foobar1" {
 	name = "httpsproxy-test-cert1-%s"
 	description = "very descriptive"
@@ -209,13 +213,13 @@ resource "google_compute_ssl_certificate" "foobar2" {
 	private_key = "${file("test-fixtures/ssl_cert/test.key")}"
 	certificate = "${file("test-fixtures/ssl_cert/test.crt")}"
 }
-`, id, id, id, id, id, id)
+`, id, id, id, id, id, id, id)
 }
 
 func testAccComputeTargetHttpsProxy_basic2(id string) string {
 	return fmt.Sprintf(`
 resource "google_compute_target_https_proxy" "foobar" {
-	description = "Resource created for Terraform acceptance testing (updated)"
+	description = "Resource created for Terraform acceptance testing"
 	name = "httpsproxy-test-%s"
 	url_map = "${google_compute_url_map.foobar.self_link}"
 	ssl_certificates = [
@@ -258,6 +262,13 @@ resource "google_compute_url_map" "foobar" {
 	}
 }
 
+resource "google_compute_ssl_policy" "foobar" {
+	name            = "sslproxy-test-%s"
+	description     = "my-description"
+	min_tls_version = "TLS_1_2"
+	profile         = "MODERN"
+}
+
 resource "google_compute_ssl_certificate" "foobar1" {
 	name = "httpsproxy-test-cert1-%s"
 	description = "very descriptive"
@@ -271,15 +282,5 @@ resource "google_compute_ssl_certificate" "foobar2" {
 	private_key = "${file("test-fixtures/ssl_cert/test.key")}"
 	certificate = "${file("test-fixtures/ssl_cert/test.crt")}"
 }
-`, id, id, id, id, id, id)
-}
-
-func testAccComputeTargetHttpsProxy_invalidCertificate(id string) string {
-	return fmt.Sprintf(`
-resource "google_compute_target_https_proxy" "foobar" {
-name = "httpsproxy-test-%s"
-url_map = "some-url-map"
-ssl_certificates = ["invalid-certificate-reference"]
-}
-`, id)
+`, id, id, id, id, id, id, id)
 }

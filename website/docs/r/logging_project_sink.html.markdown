@@ -12,7 +12,7 @@ Manages a project-level logging sink. For more information see
 [the official documentation](https://cloud.google.com/logging/docs/),
 [Exporting Logs in the API](https://cloud.google.com/logging/docs/api/tasks/exporting-logs)
 and
-[API](https://cloud.google.com/compute/docs/reference/latest/instances).
+[API](https://cloud.google.com/logging/docs/reference/v2/rest/).
 
 Note that you must have the "Logs Configuration Writer" IAM role (`roles/logging.configWriter`)
 granted to the credentials used with terraform.
@@ -100,10 +100,10 @@ The following arguments are supported:
     The writer associated with the sink must have access to write to the above resource.
 
 * `filter` - (Optional) The filter to apply when exporting logs. Only log entries that match the filter are exported.
-    See (Advanced Log Filters)[https://cloud.google.com/logging/docs/view/advanced_filters] for information on how to
+    See [Advanced Log Filters](https://cloud.google.com/logging/docs/view/advanced_filters) for information on how to
     write a filter.
 
-* `project` - (Optional) The project to create the sink in. If omitted, the project associated with the provider is
+* `project` - (Optional) The ID of the project to create the sink in. If omitted, the project associated with the provider is
     used.
 
 * `unique_writer_identity` - (Optional) Whether or not to create a unique identity associated with this sink. If `false`
@@ -118,3 +118,11 @@ exported:
 
 * `writer_identity` - The identity associated with this sink. This identity must be granted write access to the
     configured `destination`.
+
+## Import
+
+Project-level logging sinks can be imported using their URI, e.g.
+
+```
+$ terraform import google_logging_project_sink.my_sink projects/my-project/sinks/my-sink
+```

@@ -5,12 +5,14 @@ import (
 
 	"github.com/hashicorp/terraform/helper/schema"
 	"google.golang.org/api/pubsub/v1"
+	"regexp"
 )
 
 func resourcePubsubSubscription() *schema.Resource {
 	return &schema.Resource{
 		Create: resourcePubsubSubscriptionCreate,
 		Read:   resourcePubsubSubscriptionRead,
+		Update: resourcePubsubSubscriptionUpdate,
 		Delete: resourcePubsubSubscriptionDelete,
 
 		Importer: &schema.ResourceImporter{
@@ -41,6 +43,7 @@ func resourcePubsubSubscription() *schema.Resource {
 			"project": &schema.Schema{
 				Type:     schema.TypeString,
 				Optional: true,
+				Computed: true,
 				ForceNew: true,
 			},
 
@@ -52,35 +55,24 @@ func resourcePubsubSubscription() *schema.Resource {
 			"push_config": &schema.Schema{
 				Type:     schema.TypeList,
 				Optional: true,
-				ForceNew: true,
 				MaxItems: 1,
 				Elem: &schema.Resource{
 					Schema: map[string]*schema.Schema{
 						"attributes": &schema.Schema{
 							Type:     schema.TypeMap,
 							Optional: true,
-							ForceNew: true,
 							Elem:     schema.TypeString,
 						},
 
 						"push_endpoint": &schema.Schema{
 							Type:     schema.TypeString,
 							Required: true,
-							ForceNew: true,
 						},
 					},
 				},
 			},
 		},
 	}
-}
-
-func cleanAdditionalArgs(args map[string]interface{}) map[string]string {
-	cleaned_args := make(map[string]string)
-	for k, v := range args {
-		cleaned_args[k] = v.(string)
-	}
-	return cleaned_args
 }
 
 func resourcePubsubSubscriptionCreate(d *schema.ResourceData, meta interface{}) error {
@@ -91,8 +83,8 @@ func resourcePubsubSubscriptionCreate(d *schema.ResourceData, meta interface{}) 
 		return err
 	}
 
-	name := fmt.Sprintf("projects/%s/subscriptions/%s", project, d.Get("name").(string))
-	computed_topic_name := fmt.Sprintf("projects/%s/topics/%s", project, d.Get("topic").(string))
+	name := getComputedSubscriptionName(project, d.Get("name").(string))
+	computed_topic_name := getComputedTopicName(project, d.Get("topic").(string))
 
 	//  process optional parameters
 	var ackDeadlineSeconds int64
@@ -101,17 +93,10 @@ func resourcePubsubSubscriptionCreate(d *schema.ResourceData, meta interface{}) 
 		ackDeadlineSeconds = int64(v.(int))
 	}
 
-	var subscription *pubsub.Subscription
-	if v, ok := d.GetOk("push_config"); ok {
-		push_configs := v.([]interface{})
-
-		push_config := push_configs[0].(map[string]interface{})
-		attributes := push_config["attributes"].(map[string]interface{})
-		attributesClean := cleanAdditionalArgs(attributes)
-		pushConfig := &pubsub.PushConfig{Attributes: attributesClean, PushEndpoint: push_config["push_endpoint"].(string)}
-		subscription = &pubsub.Subscription{AckDeadlineSeconds: ackDeadlineSeconds, Topic: computed_topic_name, PushConfig: pushConfig}
-	} else {
-		subscription = &pubsub.Subscription{AckDeadlineSeconds: ackDeadlineSeconds, Topic: computed_topic_name}
+	subscription := &pubsub.Subscription{
+		AckDeadlineSeconds: ackDeadlineSeconds,
+		Topic:              computed_topic_name,
+		PushConfig:         expandPubsubSubscriptionPushConfig(d.Get("push_config").([]interface{})),
 	}
 
 	call := config.clientPubsub.Projects.Subscriptions.Create(name, subscription)
@@ -121,13 +106,33 @@ func resourcePubsubSubscriptionCreate(d *schema.ResourceData, meta interface{}) 
 	}
 
 	d.SetId(res.Name)
-	d.Set("path", name)
 
-	return nil
+	return resourcePubsubSubscriptionRead(d, meta)
+}
+
+func getComputedTopicName(project, topic string) string {
+	match, _ := regexp.MatchString("projects\\/.*\\/topics\\/.*", topic)
+	if match {
+		return topic
+	}
+	return fmt.Sprintf("projects/%s/topics/%s", project, topic)
+}
+
+func getComputedSubscriptionName(project, subscription string) string {
+	match, _ := regexp.MatchString("projects\\/.*\\/subscriptions\\/.*", subscription)
+	if match {
+		return subscription
+	}
+	return fmt.Sprintf("projects/%s/subscriptions/%s", project, subscription)
 }
 
 func resourcePubsubSubscriptionRead(d *schema.ResourceData, meta interface{}) error {
 	config := meta.(*Config)
+
+	project, err := getProject(d, config)
+	if err != nil {
+		return err
+	}
 
 	name := d.Id()
 	subscription, err := config.clientPubsub.Projects.Subscriptions.Get(name).Do()
@@ -139,7 +144,28 @@ func resourcePubsubSubscriptionRead(d *schema.ResourceData, meta interface{}) er
 	d.Set("topic", subscription.Topic)
 	d.Set("ack_deadline_seconds", subscription.AckDeadlineSeconds)
 	d.Set("path", subscription.Name)
-	d.Set("push_config", flattenPushConfig(subscription.PushConfig))
+	d.Set("push_config", flattenPubsubSubscriptionPushConfig(subscription.PushConfig))
+	d.Set("project", project)
+
+	return nil
+}
+
+func resourcePubsubSubscriptionUpdate(d *schema.ResourceData, meta interface{}) error {
+	config := meta.(*Config)
+
+	d.Partial(true)
+
+	if d.HasChange("push_config") {
+		_, err := config.clientPubsub.Projects.Subscriptions.ModifyPushConfig(d.Id(), &pubsub.ModifyPushConfigRequest{
+			PushConfig: expandPubsubSubscriptionPushConfig(d.Get("push_config").([]interface{})),
+		}).Do()
+
+		if err != nil {
+			return fmt.Errorf("Error updating subscription %q: %s", d.Get("name"), err)
+		}
+	}
+
+	d.Partial(false)
 
 	return nil
 }
@@ -172,7 +198,7 @@ func resourcePubsubSubscriptionStateImporter(d *schema.ResourceData, meta interf
 	return []*schema.ResourceData{d}, nil
 }
 
-func flattenPushConfig(pushConfig *pubsub.PushConfig) []map[string]interface{} {
+func flattenPubsubSubscriptionPushConfig(pushConfig *pubsub.PushConfig) []map[string]interface{} {
 	configs := make([]map[string]interface{}, 0, 1)
 
 	if pushConfig == nil || len(pushConfig.PushEndpoint) == 0 {
@@ -185,4 +211,18 @@ func flattenPushConfig(pushConfig *pubsub.PushConfig) []map[string]interface{} {
 	})
 
 	return configs
+}
+
+func expandPubsubSubscriptionPushConfig(configured []interface{}) *pubsub.PushConfig {
+	if len(configured) == 0 {
+		// An empty `pushConfig` indicates that the Pub/Sub system should stop pushing messages
+		// from the given subscription and allow messages to be pulled and acknowledged.
+		return &pubsub.PushConfig{}
+	}
+
+	pushConfig := configured[0].(map[string]interface{})
+	return &pubsub.PushConfig{
+		PushEndpoint: pushConfig["push_endpoint"].(string),
+		Attributes:   convertStringMap(pushConfig["attributes"].(map[string]interface{})),
+	}
 }

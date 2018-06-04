@@ -11,6 +11,8 @@ import (
 )
 
 func TestAccComputeBackendBucket_basic(t *testing.T) {
+	t.Parallel()
+
 	backendName := fmt.Sprintf("tf-test-%s", acctest.RandString(10))
 	storageName := fmt.Sprintf("tf-test-%s", acctest.RandString(10))
 	var svc compute.BackendBucket
@@ -27,6 +29,11 @@ func TestAccComputeBackendBucket_basic(t *testing.T) {
 						"google_compute_backend_bucket.foobar", &svc),
 				),
 			},
+			resource.TestStep{
+				ResourceName:      "google_compute_backend_bucket.foobar",
+				ImportState:       true,
+				ImportStateVerify: true,
+			},
 		},
 	})
 
@@ -36,6 +43,8 @@ func TestAccComputeBackendBucket_basic(t *testing.T) {
 }
 
 func TestAccComputeBackendBucket_basicModified(t *testing.T) {
+	t.Parallel()
+
 	backendName := fmt.Sprintf("tf-test-%s", acctest.RandString(10))
 	storageName := fmt.Sprintf("tf-test-%s", acctest.RandString(10))
 	secondStorageName := fmt.Sprintf("tf-test-%s", acctest.RandString(10))
@@ -117,6 +126,8 @@ func testAccCheckComputeBackendBucketExists(n string, svc *compute.BackendBucket
 }
 
 func TestAccComputeBackendBucket_withCdnEnabled(t *testing.T) {
+	t.Parallel()
+
 	backendName := fmt.Sprintf("tf-test-%s", acctest.RandString(10))
 	storageName := fmt.Sprintf("tf-test-%s", acctest.RandString(10))
 	var svc compute.BackendBucket

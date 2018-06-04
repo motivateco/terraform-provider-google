@@ -9,7 +9,9 @@ import (
 	"github.com/hashicorp/terraform/terraform"
 )
 
-func TestAccComputeForwardingRule_basic(t *testing.T) {
+func TestAccComputeForwardingRule_update(t *testing.T) {
+	t.Parallel()
+
 	poolName := fmt.Sprintf("tf-%s", acctest.RandString(10))
 	ruleName := fmt.Sprintf("tf-%s", acctest.RandString(10))
 
@@ -20,16 +22,27 @@ func TestAccComputeForwardingRule_basic(t *testing.T) {
 		Steps: []resource.TestStep{
 			resource.TestStep{
 				Config: testAccComputeForwardingRule_basic(poolName, ruleName),
-				Check: resource.ComposeTestCheckFunc(
-					testAccCheckComputeForwardingRuleExists(
-						"google_compute_forwarding_rule.foobar"),
-				),
+			},
+			resource.TestStep{
+				ResourceName:      "google_compute_forwarding_rule.foobar",
+				ImportState:       true,
+				ImportStateVerify: true,
+			},
+			resource.TestStep{
+				Config: testAccComputeForwardingRule_update(poolName, ruleName),
+			},
+			resource.TestStep{
+				ResourceName:      "google_compute_forwarding_rule.foobar",
+				ImportState:       true,
+				ImportStateVerify: true,
 			},
 		},
 	})
 }
 
 func TestAccComputeForwardingRule_singlePort(t *testing.T) {
+	t.Parallel()
+
 	poolName := fmt.Sprintf("tf-%s", acctest.RandString(10))
 	ruleName := fmt.Sprintf("tf-%s", acctest.RandString(10))
 
@@ -40,16 +53,19 @@ func TestAccComputeForwardingRule_singlePort(t *testing.T) {
 		Steps: []resource.TestStep{
 			resource.TestStep{
 				Config: testAccComputeForwardingRule_singlePort(poolName, ruleName),
-				Check: resource.ComposeTestCheckFunc(
-					testAccCheckComputeForwardingRuleExists(
-						"google_compute_forwarding_rule.foobar"),
-				),
+			},
+			resource.TestStep{
+				ResourceName:      "google_compute_forwarding_rule.foobar",
+				ImportState:       true,
+				ImportStateVerify: true,
 			},
 		},
 	})
 }
 
 func TestAccComputeForwardingRule_ip(t *testing.T) {
+	t.Parallel()
+
 	addrName := fmt.Sprintf("tf-%s", acctest.RandString(10))
 	poolName := fmt.Sprintf("tf-%s", acctest.RandString(10))
 	ruleName := fmt.Sprintf("tf-%s", acctest.RandString(10))
@@ -61,19 +77,24 @@ func TestAccComputeForwardingRule_ip(t *testing.T) {
 		Steps: []resource.TestStep{
 			resource.TestStep{
 				Config: testAccComputeForwardingRule_ip(addrName, poolName, ruleName),
-				Check: resource.ComposeTestCheckFunc(
-					testAccCheckComputeForwardingRuleExists(
-						"google_compute_forwarding_rule.foobar"),
-				),
+			},
+			resource.TestStep{
+				ResourceName:      "google_compute_forwarding_rule.foobar",
+				ImportState:       true,
+				ImportStateVerify: true,
 			},
 		},
 	})
 }
 
 func TestAccComputeForwardingRule_internalLoadBalancing(t *testing.T) {
+	t.Parallel()
+
 	serviceName := fmt.Sprintf("tf-%s", acctest.RandString(10))
 	checkName := fmt.Sprintf("tf-%s", acctest.RandString(10))
-	ruleName := fmt.Sprintf("tf-%s", acctest.RandString(10))
+	networkName := fmt.Sprintf("tf-%s", acctest.RandString(10))
+	ruleName1 := fmt.Sprintf("tf-%s", acctest.RandString(10))
+	ruleName2 := fmt.Sprintf("tf-%s", acctest.RandString(10))
 
 	resource.Test(t, resource.TestCase{
 		PreCheck:     func() { testAccPreCheck(t) },
@@ -81,11 +102,17 @@ func TestAccComputeForwardingRule_internalLoadBalancing(t *testing.T) {
 		CheckDestroy: testAccCheckComputeForwardingRuleDestroy,
 		Steps: []resource.TestStep{
 			resource.TestStep{
-				Config: testAccComputeForwardingRule_internalLoadBalancing(serviceName, checkName, ruleName),
-				Check: resource.ComposeTestCheckFunc(
-					testAccCheckComputeForwardingRuleExists(
-						"google_compute_forwarding_rule.foobar"),
-				),
+				Config: testAccComputeForwardingRule_internalLoadBalancing(serviceName, checkName, networkName, ruleName1, ruleName2),
+			},
+			resource.TestStep{
+				ResourceName:      "google_compute_forwarding_rule.foobar",
+				ImportState:       true,
+				ImportStateVerify: true,
+			},
+			resource.TestStep{
+				ResourceName:      "google_compute_forwarding_rule.foobar2",
+				ImportState:       true,
+				ImportStateVerify: true,
 			},
 		},
 	})
@@ -109,48 +136,43 @@ func testAccCheckComputeForwardingRuleDestroy(s *terraform.State) error {
 	return nil
 }
 
-func testAccCheckComputeForwardingRuleExists(n string) resource.TestCheckFunc {
-	return func(s *terraform.State) error {
-		rs, ok := s.RootModule().Resources[n]
-		if !ok {
-			return fmt.Errorf("Not found: %s", n)
-		}
-
-		if rs.Primary.ID == "" {
-			return fmt.Errorf("No ID is set")
-		}
-
-		config := testAccProvider.Meta().(*Config)
-
-		found, err := config.clientCompute.ForwardingRules.Get(
-			config.Project, config.Region, rs.Primary.ID).Do()
-		if err != nil {
-			return err
-		}
-
-		if found.Name != rs.Primary.ID {
-			return fmt.Errorf("ForwardingRule not found")
-		}
-
-		return nil
-	}
-}
-
 func testAccComputeForwardingRule_basic(poolName, ruleName string) string {
 	return fmt.Sprintf(`
-resource "google_compute_target_pool" "foobar-tp" {
+resource "google_compute_target_pool" "foo-tp" {
   description = "Resource created for Terraform acceptance testing"
   instances   = ["us-central1-a/foo", "us-central1-b/bar"]
-  name        = "%s"
+  name        = "foo-%s"
 }
 resource "google_compute_forwarding_rule" "foobar" {
   description = "Resource created for Terraform acceptance testing"
   ip_protocol = "UDP"
   name        = "%s"
   port_range  = "80-81"
-  target      = "${google_compute_target_pool.foobar-tp.self_link}"
+  target      = "${google_compute_target_pool.foo-tp.self_link}"
 }
 `, poolName, ruleName)
+}
+
+func testAccComputeForwardingRule_update(poolName, ruleName string) string {
+	return fmt.Sprintf(`
+resource "google_compute_target_pool" "foo-tp" {
+  description = "Resource created for Terraform acceptance testing"
+  instances   = ["us-central1-a/foo", "us-central1-b/bar"]
+  name        = "foo-%s"
+}
+resource "google_compute_target_pool" "bar-tp" {
+  description = "Resource created for Terraform acceptance testing"
+  instances   = ["us-central1-a/foo", "us-central1-b/bar"]
+  name        = "bar-%s"
+}
+resource "google_compute_forwarding_rule" "foobar" {
+  description = "Resource created for Terraform acceptance testing"
+  ip_protocol = "UDP"
+  name        = "%s"
+  port_range  = "80-81"
+  target      = "${google_compute_target_pool.bar-tp.self_link}"
+}
+`, poolName, poolName, ruleName)
 }
 
 func testAccComputeForwardingRule_singlePort(poolName, ruleName string) string {
@@ -191,7 +213,7 @@ resource "google_compute_forwarding_rule" "foobar" {
 `, addrName, poolName, ruleName)
 }
 
-func testAccComputeForwardingRule_internalLoadBalancing(serviceName, checkName, ruleName string) string {
+func testAccComputeForwardingRule_internalLoadBalancing(serviceName, checkName, networkName, ruleName1, ruleName2 string) string {
 	return fmt.Sprintf(`
 resource "google_compute_region_backend_service" "foobar-bs" {
   name                  = "%s"
@@ -209,12 +231,26 @@ resource "google_compute_health_check" "zero" {
     port = "80"
   }
 }
+resource "google_compute_network" "foobar" {
+  name = "%s"
+  auto_create_subnetworks = true
+}
 resource "google_compute_forwarding_rule" "foobar" {
   description           = "Resource created for Terraform acceptance testing"
   name                  = "%s"
   load_balancing_scheme = "INTERNAL"
   backend_service       = "${google_compute_region_backend_service.foobar-bs.self_link}"
   ports                 = ["80"]
+  network               = "${google_compute_network.foobar.name}"
+  subnetwork            = "%s"
 }
-`, serviceName, checkName, ruleName)
+resource "google_compute_forwarding_rule" "foobar2" {
+  description           = "Resource created for Terraform acceptance testing"
+  name                  = "%s"
+  load_balancing_scheme = "INTERNAL"
+  backend_service       = "${google_compute_region_backend_service.foobar-bs.self_link}"
+  ports                 = ["80"]
+  network               = "${google_compute_network.foobar.self_link}"
+}
+`, serviceName, checkName, networkName, ruleName1, networkName, ruleName2)
 }

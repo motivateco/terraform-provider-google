@@ -1,6 +1,7 @@
 package google
 
 import (
+	"encoding/json"
 	"fmt"
 	"github.com/hashicorp/terraform/helper/schema"
 	resourceManagerV2Beta1 "google.golang.org/api/cloudresourcemanager/v2beta1"
@@ -62,7 +63,7 @@ func resourceGoogleFolderCreate(d *schema.ResourceData, meta interface{}) error 
 		return fmt.Errorf("Error creating folder '%s' in '%s': %s", displayName, parent, err)
 	}
 
-	err = resourceManagerV2Beta1OperationWait(config, op, "creating folder")
+	err = resourceManagerV2Beta1OperationWait(config.clientResourceManager, op, "creating folder")
 
 	if err != nil {
 		return fmt.Errorf("Error creating folder '%s' in '%s': %s", displayName, parent, err)
@@ -75,8 +76,9 @@ func resourceGoogleFolderCreate(d *schema.ResourceData, meta interface{}) error 
 	}
 
 	// Requires 3 successive checks for safety. Nested IFs are used to avoid 3 error statement with the same message.
-	if response, ok := waitOp.Response.(map[string]interface{}); ok {
-		if val, ok := response["name"]; ok {
+	var responseMap map[string]interface{}
+	if err := json.Unmarshal(waitOp.Response, &responseMap); err == nil {
+		if val, ok := responseMap["name"]; ok {
 			if name, ok := val.(string); ok {
 				d.SetId(name)
 				return resourceGoogleFolderRead(d, meta)
@@ -130,7 +132,7 @@ func resourceGoogleFolderUpdate(d *schema.ResourceData, meta interface{}) error 
 			return fmt.Errorf("Error moving folder '%s' to '%s': %s", displayName, newParent, err)
 		}
 
-		err = resourceManagerV2Beta1OperationWait(config, op, "move folder")
+		err = resourceManagerV2Beta1OperationWait(config.clientResourceManager, op, "move folder")
 		if err != nil {
 			return fmt.Errorf("Error moving folder '%s' to '%s': %s", displayName, newParent, err)
 		}

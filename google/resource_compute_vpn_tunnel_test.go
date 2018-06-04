@@ -12,13 +12,15 @@ import (
 )
 
 func TestAccComputeVpnTunnel_basic(t *testing.T) {
+	t.Parallel()
+
 	resource.Test(t, resource.TestCase{
 		PreCheck:     func() { testAccPreCheck(t) },
 		Providers:    testAccProviders,
 		CheckDestroy: testAccCheckComputeVpnTunnelDestroy,
 		Steps: []resource.TestStep{
 			resource.TestStep{
-				Config: testAccComputeVpnTunnel_basic,
+				Config: testAccComputeVpnTunnel_basic(),
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheckComputeVpnTunnelExists(
 						"google_compute_vpn_tunnel.foobar"),
@@ -33,6 +35,8 @@ func TestAccComputeVpnTunnel_basic(t *testing.T) {
 }
 
 func TestAccComputeVpnTunnel_router(t *testing.T) {
+	t.Parallel()
+
 	router := fmt.Sprintf("tunnel-test-router-%s", acctest.RandString(10))
 	resource.Test(t, resource.TestCase{
 		PreCheck:     func() { testAccPreCheck(t) },
@@ -53,6 +57,7 @@ func TestAccComputeVpnTunnel_router(t *testing.T) {
 }
 
 func TestAccComputeVpnTunnel_defaultTrafficSelectors(t *testing.T) {
+	t.Parallel()
 
 	resource.Test(t, resource.TestCase{
 		PreCheck:     func() { testAccPreCheck(t) },
@@ -60,7 +65,7 @@ func TestAccComputeVpnTunnel_defaultTrafficSelectors(t *testing.T) {
 		CheckDestroy: testAccCheckComputeVpnTunnelDestroy,
 		Steps: []resource.TestStep{
 			resource.TestStep{
-				Config: testAccComputeVpnTunnelDefaultTrafficSelectors,
+				Config: testAccComputeVpnTunnelDefaultTrafficSelectors(),
 				Check: testAccCheckComputeVpnTunnelExists(
 					"google_compute_vpn_tunnel.foobar"),
 			},
@@ -120,12 +125,13 @@ func testAccCheckComputeVpnTunnelExists(n string) resource.TestCheckFunc {
 	}
 }
 
-var testAccComputeVpnTunnel_basic = fmt.Sprintf(`
+func testAccComputeVpnTunnel_basic() string {
+	return fmt.Sprintf(`
 resource "google_compute_network" "foobar" {
 	name = "tunnel-test-%s"
 }
 resource "google_compute_subnetwork" "foobar" {
-	name = "tunnel-test-%s"
+	name = "tunnel-test-subnetwork-%s"
 	network = "${google_compute_network.foobar.self_link}"
 	ip_cidr_range = "10.0.0.0/16"
 	region = "us-central1"
@@ -171,8 +177,9 @@ resource "google_compute_vpn_tunnel" "foobar" {
 	local_traffic_selector = ["${google_compute_subnetwork.foobar.ip_cidr_range}"]
 	remote_traffic_selector = ["192.168.0.0/24", "192.168.1.0/24"]
 }`, acctest.RandString(10), acctest.RandString(10), acctest.RandString(10),
-	acctest.RandString(10), acctest.RandString(10), acctest.RandString(10),
-	acctest.RandString(10), acctest.RandString(10))
+		acctest.RandString(10), acctest.RandString(10), acctest.RandString(10),
+		acctest.RandString(10), acctest.RandString(10))
+}
 
 func testAccComputeVpnTunnelRouter(router string) string {
 	testId := acctest.RandString(10)
@@ -181,7 +188,7 @@ func testAccComputeVpnTunnelRouter(router string) string {
 			name = "tunnel-test-%s"
 		}
 		resource "google_compute_subnetwork" "foobar" {
-			name = "tunnel-test-%s"
+			name = "tunnel-test-subnetwork-%s"
 			network = "${google_compute_network.foobar.self_link}"
 			ip_cidr_range = "10.0.0.0/16"
 			region = "us-central1"
@@ -237,7 +244,8 @@ func testAccComputeVpnTunnelRouter(router string) string {
 	`, testId, testId, testId, testId, testId, testId, testId, router, testId)
 }
 
-var testAccComputeVpnTunnelDefaultTrafficSelectors = fmt.Sprintf(`
+func testAccComputeVpnTunnelDefaultTrafficSelectors() string {
+	return fmt.Sprintf(`
 resource "google_compute_network" "foobar" {
 	name = "tunnel-test-%s"
 	auto_create_subnetworks = "true"
@@ -281,5 +289,6 @@ resource "google_compute_vpn_tunnel" "foobar" {
 	shared_secret = "unguessable"
 	peer_ip = "8.8.8.8"
 }`, acctest.RandString(10), acctest.RandString(10), acctest.RandString(10),
-	acctest.RandString(10), acctest.RandString(10), acctest.RandString(10),
-	acctest.RandString(10))
+		acctest.RandString(10), acctest.RandString(10), acctest.RandString(10),
+		acctest.RandString(10))
+}

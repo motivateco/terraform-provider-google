@@ -9,7 +9,7 @@ description: |-
 # google\_sourcerepo\_repository
 
 For more information, see [the official
-documentation](https://cloud.google.com/compute/docs/source-repositories) and
+documentation](https://cloud.google.com/source-repositories/) and
 [API](https://cloud.google.com/source-repositories/docs/reference/rest/v1/projects.repos)
 
 ## Example Usage
@@ -30,11 +30,12 @@ The following arguments are supported:
 
 - - -
 
-* `project` - (Optional) The project in which the resource belongs. If it
+* `project` - (Optional) The ID of the project in which the resource belongs. If it
     is not provided, the provider project is used.
 
 ## Attributes Reference
 
-The following attribute is exported:
+The following attributes are exported:
 
 * `size` - The size of the repository.
+* `url` - The url to clone the repository.

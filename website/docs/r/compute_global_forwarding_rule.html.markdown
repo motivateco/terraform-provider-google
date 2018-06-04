@@ -17,7 +17,7 @@ documentation](https://cloud.google.com/compute/docs/load-balancing/http/global-
 
 ```hcl
 resource "google_compute_global_forwarding_rule" "default" {
-  name       = "test"
+  name       = "default-rule"
   target     = "${google_compute_target_http_proxy.default.self_link}"
   port_range = "80"
 }
@@ -75,9 +75,6 @@ The following arguments are supported:
 
 * `target` - (Required) URL of target HTTP or HTTPS proxy.
 
-* `region` - (Optional) The region this resource has been created in. If
-    unspecified, this defaults to the region configured in the provider.
-
 - - -
 
 * `description` - (Optional) Textual description field.
@@ -92,8 +89,14 @@ The following arguments are supported:
 
 * `port_range` - (Optional) A range e.g. "1024-2048" or a single port "1024"
     (defaults to all ports!).
+  Some types of forwarding targets have constraints on the acceptable ports:
+  * Target HTTP proxy: 80, 8080
+  * Target HTTPS proxy: 443
+  * Target TCP proxy: 25, 43, 110, 143, 195, 443, 465, 587, 700, 993, 995, 1883, 5222
+  * Target SSL proxy: 25, 43, 110, 143, 195, 443, 465, 587, 700, 993, 995, 1883, 5222
+  * Target VPN gateway: 500, 4500
 
-* `project` - (Optional) The project in which the resource belongs. If it
+* `project` - (Optional) The ID of the project in which the resource belongs. If it
     is not provided, the provider project is used.
 
 * `ip_version` - (Optional)
@@ -113,3 +116,11 @@ exported:
 * `self_link` - The URI of the created resource.
 
 * `label_fingerprint` - ([Beta](/docs/providers/google/index.html#beta-features)) The current label fingerprint.
+
+## Import
+
+Global forwarding rules can be imported using the `name`, e.g.
+
+```
+$ terraform import google_compute_global_forwarding_rule.default default-rule
+```

@@ -34,9 +34,10 @@ func resourceComputeVpnTunnel() *schema.Resource {
 			},
 
 			"shared_secret": &schema.Schema{
-				Type:     schema.TypeString,
-				Required: true,
-				ForceNew: true,
+				Type:      schema.TypeString,
+				Required:  true,
+				Sensitive: true,
+				ForceNew:  true,
 			},
 
 			"target_vpn_gateway": &schema.Schema{
@@ -84,12 +85,14 @@ func resourceComputeVpnTunnel() *schema.Resource {
 			"project": &schema.Schema{
 				Type:     schema.TypeString,
 				Optional: true,
+				Computed: true,
 				ForceNew: true,
 			},
 
 			"region": &schema.Schema{
 				Type:     schema.TypeString,
 				Optional: true,
+				Computed: true,
 				ForceNew: true,
 			},
 
@@ -176,7 +179,7 @@ func resourceComputeVpnTunnelCreate(d *schema.ResourceData, meta interface{}) er
 		return fmt.Errorf("Error Inserting VPN Tunnel %s : %s", name, err)
 	}
 
-	err = computeOperationWait(config, op, project, "Inserting VPN Tunnel")
+	err = computeOperationWait(config.clientCompute, op, project, "Inserting VPN Tunnel")
 	if err != nil {
 		return fmt.Errorf("Error Waiting to Insert VPN Tunnel %s: %s", name, err)
 	}
@@ -219,6 +222,8 @@ func resourceComputeVpnTunnelRead(d *schema.ResourceData, meta interface{}) erro
 	d.Set("remote_traffic_selector", remoteTrafficSelectors)
 
 	d.Set("detailed_status", vpnTunnel.DetailedStatus)
+	d.Set("project", project)
+	d.Set("region", region)
 	d.Set("self_link", vpnTunnel.SelfLink)
 
 	d.SetId(name)
@@ -248,7 +253,7 @@ func resourceComputeVpnTunnelDelete(d *schema.ResourceData, meta interface{}) er
 		return fmt.Errorf("Error Reading VPN Tunnel %s: %s", name, err)
 	}
 
-	err = computeOperationWait(config, op, project, "Deleting VPN Tunnel")
+	err = computeOperationWait(config.clientCompute, op, project, "Deleting VPN Tunnel")
 	if err != nil {
 		return fmt.Errorf("Error Waiting to Delete VPN Tunnel %s: %s", name, err)
 	}
@@ -356,18 +361,4 @@ func getVpnTunnelLink(config *Config, project string, region string, tunnel stri
 
 	return tunnel, nil
 
-}
-
-func getVpnTunnelName(vpntunnel string) (string, error) {
-
-	if strings.HasPrefix(vpntunnel, "https://www.googleapis.com/compute/") {
-		// extract the VPN tunnel name from SelfLink URL
-		vpntunnelName := vpntunnel[strings.LastIndex(vpntunnel, "/")+1:]
-		if vpntunnelName == "" {
-			return "", fmt.Errorf("VPN tunnel url not valid")
-		}
-		return vpntunnelName, nil
-	}
-
-	return vpntunnel, nil
 }

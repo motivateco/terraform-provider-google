@@ -12,6 +12,7 @@ func resourceComputeNetwork() *schema.Resource {
 	return &schema.Resource{
 		Create: resourceComputeNetworkCreate,
 		Read:   resourceComputeNetworkRead,
+		Update: resourceComputeNetworkUpdate,
 		Delete: resourceComputeNetworkDelete,
 		Importer: &schema.ResourceImporter{
 			State: schema.ImportStatePassthrough,
@@ -28,12 +29,7 @@ func resourceComputeNetwork() *schema.Resource {
 				Type:     schema.TypeBool,
 				Optional: true,
 				ForceNew: true,
-				/* Ideally this would default to true as per the API, but that would cause
-				   existing Terraform configs which have not been updated to report this as
-				   a change. Perhaps we can bump this for a minor release bump rather than
-				   a point release.
-				Default: false, */
-				ConflictsWith: []string{"ipv4_range"},
+				Default:  true,
 			},
 
 			"description": &schema.Schema{
@@ -42,21 +38,29 @@ func resourceComputeNetwork() *schema.Resource {
 				ForceNew: true,
 			},
 
+			"routing_mode": &schema.Schema{
+				Type:     schema.TypeString,
+				Optional: true,
+				Computed: true,
+			},
+
 			"gateway_ipv4": &schema.Schema{
 				Type:     schema.TypeString,
 				Computed: true,
 			},
 
 			"ipv4_range": &schema.Schema{
-				Type:       schema.TypeString,
-				Optional:   true,
-				ForceNew:   true,
+				Type:     schema.TypeString,
+				Optional: true,
+				ForceNew: true,
+				// This needs to remain deprecated until the API is retired
 				Deprecated: "Please use google_compute_subnetwork resources instead.",
 			},
 
 			"project": &schema.Schema{
 				Type:     schema.TypeString,
 				Optional: true,
+				Computed: true,
 				ForceNew: true,
 			},
 
@@ -85,12 +89,22 @@ func resourceComputeNetworkCreate(d *schema.ResourceData, meta interface{}) erro
 	//   - 2.b - Custom subnet mode - auto_create_subnetworks = false & ipv4_range not set,
 	//
 	autoCreateSubnetworks := d.Get("auto_create_subnetworks").(bool)
+	if autoCreateSubnetworks && d.Get("ipv4_range").(string) != "" {
+		return fmt.Errorf("ipv4_range can't be set if auto_create_subnetworks is true.")
+	}
 
 	// Build the network parameter
 	network := &compute.Network{
 		Name: d.Get("name").(string),
 		AutoCreateSubnetworks: autoCreateSubnetworks,
 		Description:           d.Get("description").(string),
+	}
+
+	if v, ok := d.GetOk("routing_mode"); ok {
+		routingConfig := &compute.NetworkRoutingConfig{
+			RoutingMode: v.(string),
+		}
+		network.RoutingConfig = routingConfig
 	}
 
 	if v, ok := d.GetOk("ipv4_range"); ok {
@@ -101,7 +115,6 @@ func resourceComputeNetworkCreate(d *schema.ResourceData, meta interface{}) erro
 		// google will create a network in legacy mode.
 		network.ForceSendFields = []string{"AutoCreateSubnetworks"}
 	}
-
 	log.Printf("[DEBUG] Network insert request: %#v", network)
 	op, err := config.clientCompute.Networks.Insert(
 		project, network).Do()
@@ -112,7 +125,7 @@ func resourceComputeNetworkCreate(d *schema.ResourceData, meta interface{}) erro
 	// It probably maybe worked, so store the ID now
 	d.SetId(network.Name)
 
-	err = computeOperationWait(config, op, project, "Creating Network")
+	err = computeOperationWait(config.clientCompute, op, project, "Creating Network")
 	if err != nil {
 		return err
 	}
@@ -134,13 +147,44 @@ func resourceComputeNetworkRead(d *schema.ResourceData, meta interface{}) error 
 		return handleNotFoundError(err, d, fmt.Sprintf("Network %q", d.Get("name").(string)))
 	}
 
+	routingConfig := network.RoutingConfig
+
+	d.Set("routing_mode", routingConfig.RoutingMode)
 	d.Set("gateway_ipv4", network.GatewayIPv4)
-	d.Set("self_link", network.SelfLink)
 	d.Set("ipv4_range", network.IPv4Range)
+	d.Set("self_link", network.SelfLink)
 	d.Set("name", network.Name)
+	d.Set("description", network.Description)
 	d.Set("auto_create_subnetworks", network.AutoCreateSubnetworks)
+	d.Set("project", project)
 
 	return nil
+}
+
+func resourceComputeNetworkUpdate(d *schema.ResourceData, meta interface{}) error {
+	config := meta.(*Config)
+
+	project, err := getProject(d, config)
+	if err != nil {
+		return err
+	}
+
+	op, err := config.clientCompute.Networks.Patch(project, d.Id(), &compute.Network{
+		RoutingConfig: &compute.NetworkRoutingConfig{
+			RoutingMode: d.Get("routing_mode").(string),
+		},
+	}).Do()
+
+	if err != nil {
+		return fmt.Errorf("Error updating network: %s", err)
+	}
+
+	err = computeSharedOperationWait(config.clientCompute, op, project, "UpdateNetwork")
+	if err != nil {
+		return err
+	}
+
+	return resourceComputeNetworkRead(d, meta)
 }
 
 func resourceComputeNetworkDelete(d *schema.ResourceData, meta interface{}) error {
@@ -151,18 +195,19 @@ func resourceComputeNetworkDelete(d *schema.ResourceData, meta interface{}) erro
 		return err
 	}
 
-	// Delete the network
+	return deleteComputeNetwork(project, d.Id(), config)
+}
+
+func deleteComputeNetwork(project, network string, config *Config) error {
 	op, err := config.clientCompute.Networks.Delete(
-		project, d.Id()).Do()
+		project, network).Do()
 	if err != nil {
 		return fmt.Errorf("Error deleting network: %s", err)
 	}
 
-	err = computeOperationWait(config, op, project, "Deleting Network")
+	err = computeOperationWaitTime(config.clientCompute, op, project, "Deleting Network", 10)
 	if err != nil {
 		return err
 	}
-
-	d.SetId("")
 	return nil
 }

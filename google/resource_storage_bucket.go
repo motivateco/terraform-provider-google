@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"strconv"
 	"strings"
 	"time"
 
@@ -39,6 +40,12 @@ func resourceStorageBucket() *schema.Resource {
 				Default:  false,
 			},
 
+			"labels": &schema.Schema{
+				Type:     schema.TypeMap,
+				Optional: true,
+				Elem:     &schema.Schema{Type: schema.TypeString},
+			},
+
 			"location": &schema.Schema{
 				Type:     schema.TypeString,
 				Default:  "US",
@@ -50,15 +57,16 @@ func resourceStorageBucket() *schema.Resource {
 			},
 
 			"predefined_acl": &schema.Schema{
-				Type:       schema.TypeString,
-				Deprecated: "Please use resource \"storage_bucket_acl.predefined_acl\" instead.",
-				Optional:   true,
-				ForceNew:   true,
+				Type:     schema.TypeString,
+				Removed:  "Please use resource \"storage_bucket_acl.predefined_acl\" instead.",
+				Optional: true,
+				ForceNew: true,
 			},
 
 			"project": &schema.Schema{
 				Type:     schema.TypeString,
 				Optional: true,
+				Computed: true,
 				ForceNew: true,
 			},
 
@@ -206,6 +214,24 @@ func resourceStorageBucket() *schema.Resource {
 					},
 				},
 			},
+			"logging": &schema.Schema{
+				Type:     schema.TypeList,
+				Optional: true,
+				MaxItems: 1,
+				Elem: &schema.Resource{
+					Schema: map[string]*schema.Schema{
+						"log_bucket": &schema.Schema{
+							Type:     schema.TypeString,
+							Required: true,
+						},
+						"log_object_prefix": &schema.Schema{
+							Type:     schema.TypeString,
+							Optional: true,
+							Computed: true,
+						},
+					},
+				},
+			},
 		},
 	}
 }
@@ -223,7 +249,11 @@ func resourceStorageBucketCreate(d *schema.ResourceData, meta interface{}) error
 	location := d.Get("location").(string)
 
 	// Create a bucket, setting the acl, location and name.
-	sb := &storage.Bucket{Name: bucket, Location: location}
+	sb := &storage.Bucket{
+		Name:     bucket,
+		Labels:   expandLabels(d),
+		Location: location,
+	}
 
 	if v, ok := d.GetOk("storage_class"); ok {
 		sb.StorageClass = v.(string)
@@ -261,22 +291,15 @@ func resourceStorageBucketCreate(d *schema.ResourceData, meta interface{}) error
 		sb.Cors = expandCors(v.([]interface{}))
 	}
 
+	if v, ok := d.GetOk("logging"); ok {
+		sb.Logging = expandBucketLogging(v.([]interface{}))
+	}
+
 	var res *storage.Bucket
 
-	err = resource.Retry(1*time.Minute, func() *resource.RetryError {
-		call := config.clientStorage.Buckets.Insert(project, sb)
-		if v, ok := d.GetOk("predefined_acl"); ok {
-			call = call.PredefinedAcl(v.(string))
-		}
-
-		res, err = call.Do()
-		if err == nil {
-			return nil
-		}
-		if gerr, ok := err.(*googleapi.Error); ok && gerr.Code == 429 {
-			return resource.RetryableError(gerr)
-		}
-		return resource.NonRetryableError(err)
+	err = retry(func() error {
+		res, err = config.clientStorage.Buckets.Insert(project, sb).Do()
+		return err
 	})
 
 	if err != nil {
@@ -342,6 +365,30 @@ func resourceStorageBucketUpdate(d *schema.ResourceData, meta interface{}) error
 		sb.Cors = expandCors(v.([]interface{}))
 	}
 
+	if d.HasChange("logging") {
+		if v, ok := d.GetOk("logging"); ok {
+			sb.Logging = expandBucketLogging(v.([]interface{}))
+		} else {
+			sb.NullFields = append(sb.NullFields, "Logging")
+		}
+	}
+
+	if d.HasChange("labels") {
+		sb.Labels = expandLabels(d)
+		if len(sb.Labels) == 0 {
+			sb.NullFields = append(sb.NullFields, "Labels")
+		}
+
+		// To delete a label using PATCH, we have to explicitly set its value
+		// to null.
+		old, _ := d.GetChange("labels")
+		for k := range old.(map[string]interface{}) {
+			if _, ok := sb.Labels[k]; !ok {
+				sb.NullFields = append(sb.NullFields, fmt.Sprintf("Labels.%s", k))
+			}
+		}
+	}
+
 	res, err := config.clientStorage.Buckets.Patch(d.Get("name").(string), sb).Do()
 
 	if err != nil {
@@ -367,8 +414,25 @@ func resourceStorageBucketRead(d *schema.ResourceData, meta interface{}) error {
 	if err != nil {
 		return handleNotFoundError(err, d, fmt.Sprintf("Storage Bucket %q", d.Get("name").(string)))
 	}
-
 	log.Printf("[DEBUG] Read bucket %v at location %v\n\n", res.Name, res.SelfLink)
+
+	// We need to get the project associated with this bucket because otherwise import
+	// won't work properly.  That means we need to call the projects.get API with the
+	// project number, to get the project ID - there's no project ID field in the
+	// resource response.  However, this requires a call to the Compute API, which
+	// would otherwise not be required for this resource.  So, we're going to
+	// intentionally check whether the project is set *on the resource*.  If it is,
+	// we will not try to fetch the project name.  If it is not, either because
+	// the user intends to use the default provider project, or because the resource
+	// is currently being imported, we will read it from the API.
+	if _, ok := d.GetOk("project"); !ok {
+		proj, err := config.clientCompute.Projects.Get(strconv.FormatUint(res.ProjectNumber, 10)).Do()
+		if err != nil {
+			return err
+		}
+		log.Printf("[DEBUG] Bucket %v is in project number %v, which is project ID %s.\n", res.Name, res.ProjectNumber, proj.Name)
+		d.Set("project", proj.Name)
+	}
 
 	// Update the bucket ID according to the resource ID
 	d.Set("self_link", res.SelfLink)
@@ -376,7 +440,10 @@ func resourceStorageBucketRead(d *schema.ResourceData, meta interface{}) error {
 	d.Set("storage_class", res.StorageClass)
 	d.Set("location", res.Location)
 	d.Set("cors", flattenCors(res.Cors))
+	d.Set("logging", flattenBucketLogging(res.Logging))
 	d.Set("versioning", flattenBucketVersioning(res.Versioning))
+	d.Set("lifecycle_rule", flattenBucketLifecycle(res.Lifecycle))
+	d.Set("labels", res.Labels)
 	d.SetId(res.Id)
 	return nil
 }
@@ -388,7 +455,7 @@ func resourceStorageBucketDelete(d *schema.ResourceData, meta interface{}) error
 	bucket := d.Get("name").(string)
 
 	for {
-		res, err := config.clientStorage.Objects.List(bucket).Do()
+		res, err := config.clientStorage.Objects.List(bucket).Versions(true).Do()
 		if err != nil {
 			fmt.Printf("Error Objects.List failed: %v", err)
 			return err
@@ -401,7 +468,7 @@ func resourceStorageBucketDelete(d *schema.ResourceData, meta interface{}) error
 
 				for _, object := range res.Items {
 					log.Printf("[DEBUG] Found %s", object.Name)
-					if err := config.clientStorage.Objects.Delete(bucket, object.Name).Do(); err != nil {
+					if err := config.clientStorage.Objects.Delete(bucket, object.Name).Generation(object.Generation).Do(); err != nil {
 						log.Fatalf("Error trying to delete object: %s %s\n\n", object.Name, err)
 					} else {
 						log.Printf("Object deleted: %s \n\n", object.Name)
@@ -440,6 +507,7 @@ func resourceStorageBucketDelete(d *schema.ResourceData, meta interface{}) error
 
 func resourceStorageBucketStateImporter(d *schema.ResourceData, meta interface{}) ([]*schema.ResourceData, error) {
 	d.Set("name", d.Id())
+	d.Set("force_destroy", false)
 	return []*schema.ResourceData{d}, nil
 }
 
@@ -474,6 +542,34 @@ func flattenCors(corsRules []*storage.BucketCors) []map[string]interface{} {
 	return corsRulesSchema
 }
 
+func expandBucketLogging(configured interface{}) *storage.BucketLogging {
+	loggings := configured.([]interface{})
+	logging := loggings[0].(map[string]interface{})
+
+	bucketLogging := &storage.BucketLogging{
+		LogBucket:       logging["log_bucket"].(string),
+		LogObjectPrefix: logging["log_object_prefix"].(string),
+	}
+
+	return bucketLogging
+}
+
+func flattenBucketLogging(bucketLogging *storage.BucketLogging) []map[string]interface{} {
+	loggings := make([]map[string]interface{}, 0, 1)
+
+	if bucketLogging == nil {
+		return loggings
+	}
+
+	logging := map[string]interface{}{
+		"log_bucket":        bucketLogging.LogBucket,
+		"log_object_prefix": bucketLogging.LogObjectPrefix,
+	}
+
+	loggings = append(loggings, logging)
+	return loggings
+}
+
 func expandBucketVersioning(configured interface{}) *storage.BucketVersioning {
 	versionings := configured.([]interface{})
 	versioning := versionings[0].(map[string]interface{})
@@ -498,6 +594,43 @@ func flattenBucketVersioning(bucketVersioning *storage.BucketVersioning) []map[s
 	}
 	versionings = append(versionings, versioning)
 	return versionings
+}
+
+func flattenBucketLifecycle(lifecycle *storage.BucketLifecycle) []map[string]interface{} {
+	if lifecycle == nil || lifecycle.Rule == nil {
+		return []map[string]interface{}{}
+	}
+
+	rules := make([]map[string]interface{}, 0, len(lifecycle.Rule))
+
+	for _, rule := range lifecycle.Rule {
+		rules = append(rules, map[string]interface{}{
+			"action":    schema.NewSet(resourceGCSBucketLifecycleRuleActionHash, []interface{}{flattenBucketLifecycleRuleAction(rule.Action)}),
+			"condition": schema.NewSet(resourceGCSBucketLifecycleRuleConditionHash, []interface{}{flattenBucketLifecycleRuleCondition(rule.Condition)}),
+		})
+	}
+
+	return rules
+}
+
+func flattenBucketLifecycleRuleAction(action *storage.BucketLifecycleRuleAction) map[string]interface{} {
+	return map[string]interface{}{
+		"type":          action.Type,
+		"storage_class": action.StorageClass,
+	}
+}
+
+func flattenBucketLifecycleRuleCondition(condition *storage.BucketLifecycleRuleCondition) map[string]interface{} {
+	ruleCondition := map[string]interface{}{
+		"age":                   int(condition.Age),
+		"created_before":        condition.CreatedBefore,
+		"matches_storage_class": convertStringArrToInterface(condition.MatchesStorageClass),
+		"num_newer_versions":    int(condition.NumNewerVersions),
+	}
+	if condition.IsLive != nil {
+		ruleCondition["is_live"] = *condition.IsLive
+	}
+	return ruleCondition
 }
 
 func resourceGCSBucketLifecycleCreateOrUpdate(d *schema.ResourceData, sb *storage.Bucket) error {
@@ -545,7 +678,7 @@ func resourceGCSBucketLifecycleCreateOrUpdate(d *schema.ResourceData, sb *storag
 					}
 
 					if v, ok := condition["is_live"]; ok {
-						target_lifecycle_rule.Condition.IsLive = v.(bool)
+						target_lifecycle_rule.Condition.IsLive = googleapi.Bool(v.(bool))
 					}
 
 					if v, ok := condition["matches_storage_class"]; ok {
@@ -569,6 +702,10 @@ func resourceGCSBucketLifecycleCreateOrUpdate(d *schema.ResourceData, sb *storag
 			}
 
 			sb.Lifecycle.Rule = append(sb.Lifecycle.Rule, target_lifecycle_rule)
+		}
+	} else {
+		sb.Lifecycle = &storage.BucketLifecycle{
+			ForceSendFields: []string{"Rule"},
 		}
 	}
 

@@ -48,6 +48,7 @@ func resourceBigQueryDataset() *schema.Resource {
 			"project": {
 				Type:     schema.TypeString,
 				Optional: true,
+				Computed: true,
 				ForceNew: true,
 			},
 
@@ -64,14 +65,13 @@ func resourceBigQueryDataset() *schema.Resource {
 			},
 
 			// Location: [Experimental] The geographic location where the dataset
-			// should reside. Possible values include EU and US. The default value
-			// is US.
+			// should reside.
 			"location": {
 				Type:         schema.TypeString,
 				Optional:     true,
 				ForceNew:     true,
 				Default:      "US",
-				ValidateFunc: validation.StringInSlice([]string{"US", "EU"}, false),
+				ValidateFunc: validation.StringInSlice([]string{"US", "EU", "asia-northeast1"}, false),
 			},
 
 			// DefaultTableExpirationMs: [Optional] The default lifetime of all
@@ -227,6 +227,7 @@ func resourceBigQueryDatasetRead(d *schema.ResourceData, meta interface{}) error
 		return handleNotFoundError(err, d, fmt.Sprintf("BigQuery dataset %q", datasetID))
 	}
 
+	d.Set("project", projectID)
 	d.Set("etag", res.Etag)
 	d.Set("labels", res.Labels)
 	d.Set("self_link", res.SelfLink)

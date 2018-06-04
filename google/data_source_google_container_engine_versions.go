@@ -17,7 +17,11 @@ func dataSourceGoogleContainerEngineVersions() *schema.Resource {
 			},
 			"zone": {
 				Type:     schema.TypeString,
-				Required: true,
+				Optional: true,
+			},
+			"default_cluster_version": {
+				Type:     schema.TypeString,
+				Computed: true,
 			},
 			"latest_master_version": {
 				Type:     schema.TypeString,
@@ -49,7 +53,10 @@ func dataSourceGoogleContainerEngineVersionsRead(d *schema.ResourceData, meta in
 		return err
 	}
 
-	zone := d.Get("zone").(string)
+	zone, err := getZone(d, meta.(*Config))
+	if err != nil {
+		return err
+	}
 
 	resp, err := config.clientContainer.Projects.Zones.GetServerconfig(project, zone).Do()
 	if err != nil {
@@ -57,6 +64,7 @@ func dataSourceGoogleContainerEngineVersionsRead(d *schema.ResourceData, meta in
 	}
 
 	d.Set("valid_master_versions", resp.ValidMasterVersions)
+	d.Set("default_cluster_version", resp.DefaultClusterVersion)
 	d.Set("valid_node_versions", resp.ValidNodeVersions)
 	d.Set("latest_master_version", resp.ValidMasterVersions[0])
 	d.Set("latest_node_version", resp.ValidNodeVersions[0])

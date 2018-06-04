@@ -20,7 +20,7 @@ Use the navigation to the left to read about the available resources.
 // Configure the Google Cloud provider
 provider "google" {
   credentials = "${file("account.json")}"
-  project     = "my-gce-project"
+  project     = "my-gce-project-id"
   region      = "us-central1"
 }
 
@@ -34,9 +34,9 @@ resource "google_compute_instance" "default" {
 
 The following keys can be used to configure the provider.
 
-* `credentials` - (Optional) Contents of the JSON file used to describe your
-  account credentials, downloaded from Google Cloud Console. More details on
-  retrieving this file are below.
+* `credentials` - (Optional) Contents of a file that contains your service
+  account private key in JSON format. You can download this file from the
+  Google Cloud Console. More details on retrieving this file are below.
 
   Credentials can also be specified using any of the following environment
   variables (listed in order of precedence):
@@ -45,9 +45,9 @@ The following keys can be used to configure the provider.
     * `GOOGLE_CLOUD_KEYFILE_JSON`
     * `GCLOUD_KEYFILE_JSON`
 
-    The [`GOOGLE_APPLICATION_CREDENTIALS`](https://developers.google.com/identity/protocols/application-default-credentials#howtheywork)
-    environment variable can also contain the path of a file to obtain credentials
-    from.
+  The [`GOOGLE_APPLICATION_CREDENTIALS`](https://developers.google.com/identity/protocols/application-default-credentials#howtheywork)
+  environment variable can also contain the path of a file to obtain credentials
+  from.
 
   If no credentials are specified, the provider will fall back to using the
   [Google Application Default
@@ -60,21 +60,30 @@ The following keys can be used to configure the provider.
   login`](https://cloud.google.com/sdk/gcloud/reference/auth/application-default/login),
   the provider will use your identity.
 
-* `project` - (Required) The ID of the project to apply any resources to.  This
+* `project` - (Optional) The ID of the project to apply any resources to.  This
   can also be specified using any of the following environment variables (listed
   in order of precedence):
 
     * `GOOGLE_PROJECT`
+    * `GOOGLE_CLOUD_PROJECT`
     * `GCLOUD_PROJECT`
     * `CLOUDSDK_CORE_PROJECT`
 
-* `region` - (Required) The region to operate under. This can also be specified
-  using any of the following environment variables (listed in order of
+* `region` - (Optional) The region to operate under, if not specified by a given resource.
+  This can also be specified using any of the following environment variables (listed in order of
   precedence):
 
     * `GOOGLE_REGION`
     * `GCLOUD_REGION`
     * `CLOUDSDK_COMPUTE_REGION`
+
+* `zone` - (Optional) The zone to operate under, if not specified by a given resource.
+  This can also be specified using any of the following environment variables (listed in order of
+  precedence):
+
+    * `GOOGLE_ZONE`
+    * `GCLOUD_ZONE`
+    * `CLOUDSDK_COMPUTE_ZONE`
 
 ## Authentication JSON File
 
@@ -103,5 +112,6 @@ deprecation policy, and no SLA, but are otherwise considered to be feature-compl
 with only minor outstanding issues after their Alpha period. Beta is when a GCP feature
 is publicly announced, and is when they generally become publicly available.
 
-Resources will automatically be provisioned using Beta APIs when you specify a feature
-marked Beta in your Terraform config file.
+Terraform resources that support beta features will always use the Beta APIs to provision
+the resource. Importing a resource that supports beta features will always import those
+features, even if the resource was created in a matter that was not explicitly beta.

@@ -15,6 +15,10 @@ func resourceComputeUrlMap() *schema.Resource {
 		Update: resourceComputeUrlMapUpdate,
 		Delete: resourceComputeUrlMapDelete,
 
+		Importer: &schema.ResourceImporter{
+			State: resourceComputeUrlMapImportState,
+		},
+
 		Schema: map[string]*schema.Schema{
 			"default_service": &schema.Schema{
 				Type:     schema.TypeString,
@@ -63,7 +67,7 @@ func resourceComputeUrlMap() *schema.Resource {
 				},
 			},
 
-			"id": &schema.Schema{
+			"map_id": &schema.Schema{
 				Type:     schema.TypeString,
 				Computed: true,
 			},
@@ -113,6 +117,7 @@ func resourceComputeUrlMap() *schema.Resource {
 			"project": &schema.Schema{
 				Type:     schema.TypeString,
 				Optional: true,
+				Computed: true,
 				ForceNew: true,
 			},
 
@@ -288,7 +293,7 @@ func resourceComputeUrlMapCreate(d *schema.ResourceData, meta interface{}) error
 		return fmt.Errorf("Error, failed to insert Url Map %s: %s", name, err)
 	}
 
-	err = computeOperationWait(config, op, project, "Insert Url Map")
+	err = computeOperationWait(config.clientCompute, op, project, "Insert Url Map")
 
 	if err != nil {
 		return fmt.Errorf("Error, failed waitng to insert Url Map %s: %s", name, err)
@@ -314,9 +319,11 @@ func resourceComputeUrlMapRead(d *schema.ResourceData, meta interface{}) error {
 	}
 
 	d.SetId(name)
+	d.Set("project", project)
 	d.Set("self_link", urlMap.SelfLink)
-	d.Set("id", strconv.FormatUint(urlMap.Id, 10))
+	d.Set("map_id", strconv.FormatUint(urlMap.Id, 10))
 	d.Set("fingerprint", urlMap.Fingerprint)
+	d.Set("default_service", urlMap.DefaultService)
 
 	hostRuleMap := make(map[string]*compute.HostRule)
 	for _, v := range urlMap.HostRules {
@@ -642,7 +649,7 @@ func resourceComputeUrlMapUpdate(d *schema.ResourceData, meta interface{}) error
 		return fmt.Errorf("Error, failed to update Url Map %s: %s", name, err)
 	}
 
-	err = computeOperationWait(config, op, project, "Update Url Map")
+	err = computeOperationWait(config.clientCompute, op, project, "Update Url Map")
 
 	if err != nil {
 		return fmt.Errorf("Error, failed waitng to update Url Map %s: %s", name, err)
@@ -667,7 +674,7 @@ func resourceComputeUrlMapDelete(d *schema.ResourceData, meta interface{}) error
 		return fmt.Errorf("Error, failed to delete Url Map %s: %s", name, err)
 	}
 
-	err = computeOperationWait(config, op, project, "Delete Url Map")
+	err = computeOperationWait(config.clientCompute, op, project, "Delete Url Map")
 
 	if err != nil {
 		return fmt.Errorf("Error, failed waitng to delete Url Map %s: %s", name, err)
@@ -676,17 +683,7 @@ func resourceComputeUrlMapDelete(d *schema.ResourceData, meta interface{}) error
 	return nil
 }
 
-func validateHostRules(v interface{}, k string) (ws []string, es []error) {
-	pathMatchers := make(map[string]bool)
-	hostRules := v.([]interface{})
-	for _, hri := range hostRules {
-		hr := hri.(map[string]interface{})
-		pm := hr["path_matcher"].(string)
-		if pathMatchers[pm] {
-			es = append(es, fmt.Errorf("Multiple host_rule entries with the same path_matcher are not allowed. Please collapse all hosts with the same path_matcher into one host_rule"))
-			return
-		}
-		pathMatchers[pm] = true
-	}
-	return
+func resourceComputeUrlMapImportState(d *schema.ResourceData, meta interface{}) ([]*schema.ResourceData, error) {
+	d.Set("name", d.Id())
+	return []*schema.ResourceData{d}, nil
 }

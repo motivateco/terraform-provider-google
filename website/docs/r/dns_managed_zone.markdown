@@ -25,7 +25,7 @@ resource "google_dns_managed_zone" "prod" {
 
 The following arguments are supported:
 
-* `dns_name` - (Required) The DNS name of this zone, e.g. "terraform.io".
+* `dns_name` - (Required) The fully qualified DNS name of this zone, e.g. `terraform.io.`.
 
 * `name` - (Required) A unique name for the resource, required by GCE.
     Changing this forces a new resource to be created.
@@ -34,7 +34,7 @@ The following arguments are supported:
 
 * `description` - (Optional) A textual description field. Defaults to 'Managed by Terraform'.
 
-* `project` - (Optional) The project in which the resource belongs. If it
+* `project` - (Optional) The ID of the project in which the resource belongs. If it
     is not provided, the provider project is used.
 
 ## Attributes Reference

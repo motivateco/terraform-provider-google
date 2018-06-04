@@ -9,46 +9,69 @@ import (
 	"github.com/hashicorp/terraform/terraform"
 )
 
-func TestAccGoogleSqlUser_basic(t *testing.T) {
-	user := acctest.RandString(10)
-	instance := acctest.RandString(10)
+func TestAccSqlUser_firstGen(t *testing.T) {
+	t.Parallel()
 
+	instance := acctest.RandomWithPrefix("i")
 	resource.Test(t, resource.TestCase{
 		PreCheck:     func() { testAccPreCheck(t) },
 		Providers:    testAccProviders,
-		CheckDestroy: testAccGoogleSqlUserDestroy,
+		CheckDestroy: testAccSqlUserDestroy,
 		Steps: []resource.TestStep{
 			resource.TestStep{
-				Config: testGoogleSqlUser_basic(instance, user),
+				Config: testGoogleSqlUser_firstGen(instance, "password"),
 				Check: resource.ComposeTestCheckFunc(
-					testAccCheckGoogleSqlUserExists("google_sql_user.user"),
+					testAccCheckGoogleSqlUserExists("google_sql_user.user1"),
+					testAccCheckGoogleSqlUserExists("google_sql_user.user2"),
 				),
+			},
+			resource.TestStep{
+				// Update password
+				Config: testGoogleSqlUser_firstGen(instance, "new_password"),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheckGoogleSqlUserExists("google_sql_user.user1"),
+					testAccCheckGoogleSqlUserExists("google_sql_user.user2"),
+				),
+			},
+			resource.TestStep{
+				ResourceName:            "google_sql_user.user2",
+				ImportStateId:           instance + "/gmail.com/admin",
+				ImportState:             true,
+				ImportStateVerify:       true,
+				ImportStateVerifyIgnore: []string{"password"},
 			},
 		},
 	})
 }
 
-func TestAccGoogleSqlUser_update(t *testing.T) {
-	user := acctest.RandString(10)
-	instance := acctest.RandString(10)
+func TestAccSqlUser_secondGen(t *testing.T) {
+	t.Parallel()
 
+	instance := acctest.RandomWithPrefix("i")
 	resource.Test(t, resource.TestCase{
 		PreCheck:     func() { testAccPreCheck(t) },
 		Providers:    testAccProviders,
-		CheckDestroy: testAccGoogleSqlUserDestroy,
+		CheckDestroy: testAccSqlUserDestroy,
 		Steps: []resource.TestStep{
 			resource.TestStep{
-				Config: testGoogleSqlUser_basic(instance, user),
+				Config: testGoogleSqlUser_secondGen(instance, "password"),
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheckGoogleSqlUserExists("google_sql_user.user"),
 				),
 			},
-
 			resource.TestStep{
-				Config: testGoogleSqlUser_basic2(instance, user),
+				// Update password
+				Config: testGoogleSqlUser_secondGen(instance, "new_password"),
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheckGoogleSqlUserExists("google_sql_user.user"),
 				),
+			},
+			resource.TestStep{
+				ResourceName:            "google_sql_user.user",
+				ImportStateId:           instance + "/admin",
+				ImportState:             true,
+				ImportStateVerify:       true,
+				ImportStateVerifyIgnore: []string{"password"},
 			},
 		},
 	})
@@ -68,6 +91,10 @@ func testAccCheckGoogleSqlUserExists(n string) resource.TestCheckFunc {
 		users, err := config.clientSqlAdmin.Users.List(config.Project,
 			instance).Do()
 
+		if err != nil {
+			return err
+		}
+
 		for _, user := range users.Items {
 			if user.Name == name && user.Host == host {
 				return nil
@@ -78,7 +105,7 @@ func testAccCheckGoogleSqlUserExists(n string) resource.TestCheckFunc {
 	}
 }
 
-func testAccGoogleSqlUserDestroy(s *terraform.State) error {
+func testAccSqlUserDestroy(s *terraform.State) error {
 	for _, rs := range s.RootModule().Resources {
 		config := testAccProvider.Meta().(*Config)
 		if rs.Type != "google_sql_database" {
@@ -103,40 +130,48 @@ func testAccGoogleSqlUserDestroy(s *terraform.State) error {
 	return nil
 }
 
-func testGoogleSqlUser_basic(instance, user string) string {
+func testGoogleSqlUser_firstGen(instance, password string) string {
 	return fmt.Sprintf(`
 	resource "google_sql_database_instance" "instance" {
-		name = "i%s"
+		name = "%s"
 		region = "us-central"
 		settings {
 			tier = "D0"
 		}
 	}
 
-	resource "google_sql_user" "user" {
-		name = "user%s"
+	resource "google_sql_user" "user1" {
+		name = "admin"
 		instance = "${google_sql_database_instance.instance.name}"
 		host = "google.com"
+		password = "%s"
+	}
+
+	resource "google_sql_user" "user2" {
+		name = "admin"
+		instance = "${google_sql_database_instance.instance.name}"
+		host = "gmail.com"
 		password = "hunter2"
 	}
-	`, instance, user)
+	`, instance, password)
 }
 
-func testGoogleSqlUser_basic2(instance, user string) string {
+func testGoogleSqlUser_secondGen(instance, password string) string {
 	return fmt.Sprintf(`
 	resource "google_sql_database_instance" "instance" {
-		name = "i%s"
-		region = "us-central"
+		name = "%s"
+		region = "us-central1"
+		database_version = "POSTGRES_9_6"
+
 		settings {
-			tier = "D0"
+			tier = "db-f1-micro"
 		}
 	}
 
 	resource "google_sql_user" "user" {
-		name = "user%s"
+		name = "admin"
 		instance = "${google_sql_database_instance.instance.name}"
-		host = "google.com"
-		password = "oops"
+		password = "%s"
 	}
-	`, instance, user)
+	`, instance, password)
 }

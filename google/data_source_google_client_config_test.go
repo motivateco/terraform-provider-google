@@ -7,6 +7,8 @@ import (
 )
 
 func TestAccDataSourceGoogleClientConfig_basic(t *testing.T) {
+	t.Parallel()
+
 	resourceName := "data.google_client_config.current"
 
 	resource.Test(t, resource.TestCase{
@@ -18,6 +20,7 @@ func TestAccDataSourceGoogleClientConfig_basic(t *testing.T) {
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttrSet(resourceName, "project"),
 					resource.TestCheckResourceAttrSet(resourceName, "region"),
+					resource.TestCheckResourceAttrSet(resourceName, "access_token"),
 				),
 			},
 		},

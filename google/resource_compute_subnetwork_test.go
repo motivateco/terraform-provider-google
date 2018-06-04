@@ -10,7 +10,47 @@ import (
 	"google.golang.org/api/compute/v1"
 )
 
+// Unit tests
+
+func TestIsShrinkageIpCidr(t *testing.T) {
+	cases := map[string]struct {
+		Old, New  string
+		Shrinkage bool
+	}{
+		"Expansion same network ip": {
+			Old:       "10.0.0.0/24",
+			New:       "10.0.0.0/16",
+			Shrinkage: false,
+		},
+		"Expansion different network ip": {
+			Old:       "10.0.1.0/24",
+			New:       "10.0.0.0/16",
+			Shrinkage: false,
+		},
+		"Shrinkage same network ip": {
+			Old:       "10.0.0.0/16",
+			New:       "10.0.0.0/24",
+			Shrinkage: true,
+		},
+		"Shrinkage different network ip": {
+			Old:       "10.0.0.0/16",
+			New:       "10.1.0.0/16",
+			Shrinkage: true,
+		},
+	}
+
+	for tn, tc := range cases {
+		if isShrinkageIpCidr(tc.Old, tc.New, nil) != tc.Shrinkage {
+			t.Errorf("%s failed: Shrinkage should be %t", tn, tc.Shrinkage)
+		}
+	}
+}
+
+// Acceptance tests
+
 func TestAccComputeSubnetwork_basic(t *testing.T) {
+	t.Parallel()
+
 	var subnetwork1 compute.Subnetwork
 	var subnetwork2 compute.Subnetwork
 
@@ -33,11 +73,23 @@ func TestAccComputeSubnetwork_basic(t *testing.T) {
 						"google_compute_subnetwork.network-ref-by-name", &subnetwork2),
 				),
 			},
+			resource.TestStep{
+				ResourceName:      "google_compute_subnetwork.network-ref-by-url",
+				ImportState:       true,
+				ImportStateVerify: true,
+			},
+			resource.TestStep{
+				ResourceName:      "google_compute_subnetwork.network-with-private-google-access",
+				ImportState:       true,
+				ImportStateVerify: true,
+			},
 		},
 	})
 }
 
 func TestAccComputeSubnetwork_update(t *testing.T) {
+	t.Parallel()
+
 	var subnetwork compute.Subnetwork
 
 	cnName := fmt.Sprintf("tf-test-%s", acctest.RandString(10))
@@ -49,14 +101,23 @@ func TestAccComputeSubnetwork_update(t *testing.T) {
 		CheckDestroy: testAccCheckComputeSubnetworkDestroy,
 		Steps: []resource.TestStep{
 			resource.TestStep{
-				Config: testAccComputeSubnetwork_update1(cnName, subnetworkName),
+				Config: testAccComputeSubnetwork_update1(cnName, "10.2.0.0/24", subnetworkName),
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheckComputeSubnetworkExists(
 						"google_compute_subnetwork.network-with-private-google-access", &subnetwork),
 				),
 			},
 			resource.TestStep{
-				Config: testAccComputeSubnetwork_update2(cnName, subnetworkName),
+				// Expand IP CIDR range and update private_ip_google_access
+				Config: testAccComputeSubnetwork_update2(cnName, "10.2.0.0/16", subnetworkName),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheckComputeSubnetworkExists(
+						"google_compute_subnetwork.network-with-private-google-access", &subnetwork),
+				),
+			},
+			resource.TestStep{
+				// Shrink IP CIDR range and update private_ip_google_access
+				Config: testAccComputeSubnetwork_update2(cnName, "10.2.0.0/24", subnetworkName),
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheckComputeSubnetworkExists(
 						"google_compute_subnetwork.network-with-private-google-access", &subnetwork),
@@ -71,6 +132,8 @@ func TestAccComputeSubnetwork_update(t *testing.T) {
 }
 
 func TestAccComputeSubnetwork_secondaryIpRanges(t *testing.T) {
+	t.Parallel()
+
 	var subnetwork compute.Subnetwork
 
 	cnName := fmt.Sprintf("tf-test-%s", acctest.RandString(10))
@@ -82,11 +145,72 @@ func TestAccComputeSubnetwork_secondaryIpRanges(t *testing.T) {
 		CheckDestroy: testAccCheckComputeSubnetworkDestroy,
 		Steps: []resource.TestStep{
 			resource.TestStep{
-				Config: testAccComputeSubnetwork_secondaryIpRanges(cnName, subnetworkName),
+				Config: testAccComputeSubnetwork_secondaryIpRanges_update1(cnName, subnetworkName),
 				Check: resource.ComposeTestCheckFunc(
-					testAccCheckComputeSubnetworkExists("google_compute_subnetwork.network-with-private-secondary-ip-range", &subnetwork),
-					testAccCheckComputeSubnetworkHasSecondaryIpRange(&subnetwork, "tf-test-secondary-range", "192.168.1.0/24"),
+					testAccCheckComputeSubnetworkExists("google_compute_subnetwork.network-with-private-secondary-ip-ranges", &subnetwork),
+					testAccCheckComputeSubnetworkHasSecondaryIpRange(&subnetwork, "tf-test-secondary-range-update1", "192.168.10.0/24"),
 				),
+			},
+			resource.TestStep{
+				Config: testAccComputeSubnetwork_secondaryIpRanges_update2(cnName, subnetworkName),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheckComputeSubnetworkExists("google_compute_subnetwork.network-with-private-secondary-ip-ranges", &subnetwork),
+					testAccCheckComputeSubnetworkHasSecondaryIpRange(&subnetwork, "tf-test-secondary-range-update1", "192.168.10.0/24"),
+					testAccCheckComputeSubnetworkHasSecondaryIpRange(&subnetwork, "tf-test-secondary-range-update2", "192.168.11.0/24"),
+				),
+			},
+			resource.TestStep{
+				Config: testAccComputeSubnetwork_secondaryIpRanges_update1(cnName, subnetworkName),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheckComputeSubnetworkExists("google_compute_subnetwork.network-with-private-secondary-ip-ranges", &subnetwork),
+					testAccCheckComputeSubnetworkHasSecondaryIpRange(&subnetwork, "tf-test-secondary-range-update1", "192.168.10.0/24"),
+					testAccCheckComputeSubnetworkHasNotSecondaryIpRange(&subnetwork, "tf-test-secondary-range-update2", "192.168.11.0/24"),
+				),
+			},
+		},
+	})
+}
+
+func TestAccComputeSubnetwork_flowLogs(t *testing.T) {
+	t.Parallel()
+
+	var subnetwork compute.Subnetwork
+
+	cnName := fmt.Sprintf("tf-test-%s", acctest.RandString(10))
+	subnetworkName := fmt.Sprintf("tf-test-%s", acctest.RandString(10))
+
+	resource.Test(t, resource.TestCase{
+		PreCheck:     func() { testAccPreCheck(t) },
+		Providers:    testAccProviders,
+		CheckDestroy: testAccCheckComputeSubnetworkDestroy,
+		Steps: []resource.TestStep{
+			{
+				Config: testAccComputeSubnetwork_flowLogs(cnName, subnetworkName, true),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheckComputeSubnetworkExists(
+						"google_compute_subnetwork.network-with-flow-logs", &subnetwork),
+					resource.TestCheckResourceAttr("google_compute_subnetwork.network-with-flow-logs",
+						"enable_flow_logs", "true"),
+				),
+			},
+			{
+				ResourceName:      "google_compute_subnetwork.network-with-flow-logs",
+				ImportState:       true,
+				ImportStateVerify: true,
+			},
+			{
+				Config: testAccComputeSubnetwork_flowLogs(cnName, subnetworkName, false),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheckComputeSubnetworkExists(
+						"google_compute_subnetwork.network-with-flow-logs", &subnetwork),
+					resource.TestCheckResourceAttr("google_compute_subnetwork.network-with-flow-logs",
+						"enable_flow_logs", "false"),
+				),
+			},
+			{
+				ResourceName:      "google_compute_subnetwork.network-with-flow-logs",
+				ImportState:       true,
+				ImportStateVerify: true,
 			},
 		},
 	})
@@ -156,6 +280,20 @@ func testAccCheckComputeSubnetworkHasSecondaryIpRange(subnetwork *compute.Subnet
 	}
 }
 
+func testAccCheckComputeSubnetworkHasNotSecondaryIpRange(subnetwork *compute.Subnetwork, rangeName, ipCidrRange string) resource.TestCheckFunc {
+	return func(s *terraform.State) error {
+		for _, secondaryRange := range subnetwork.SecondaryIpRanges {
+			if secondaryRange.RangeName == rangeName {
+				if secondaryRange.IpCidrRange == ipCidrRange {
+					return fmt.Errorf("Secondary range %s has the wrong ip_cidr_range. Expected %s, got %s", rangeName, ipCidrRange, secondaryRange.IpCidrRange)
+				}
+			}
+		}
+
+		return nil
+	}
+}
+
 func testAccComputeSubnetwork_basic(cnName, subnetwork1Name, subnetwork2Name, subnetwork3Name string) string {
 	return fmt.Sprintf(`
 resource "google_compute_network" "custom-test" {
@@ -188,7 +326,7 @@ resource "google_compute_subnetwork" "network-with-private-google-access" {
 `, cnName, subnetwork1Name, subnetwork2Name, subnetwork3Name)
 }
 
-func testAccComputeSubnetwork_update1(cnName, subnetworkName string) string {
+func testAccComputeSubnetwork_update1(cnName, cidrRange, subnetworkName string) string {
 	return fmt.Sprintf(`
 resource "google_compute_network" "custom-test" {
 	name = "%s"
@@ -197,15 +335,15 @@ resource "google_compute_network" "custom-test" {
 
 resource "google_compute_subnetwork" "network-with-private-google-access" {
 	name = "%s"
-	ip_cidr_range = "10.2.0.0/16"
+	ip_cidr_range = "%s"
 	region = "us-central1"
 	network = "${google_compute_network.custom-test.self_link}"
 	private_ip_google_access = true
 }
-`, cnName, subnetworkName)
+`, cnName, subnetworkName, cidrRange)
 }
 
-func testAccComputeSubnetwork_update2(cnName, subnetworkName string) string {
+func testAccComputeSubnetwork_update2(cnName, cidrRange, subnetworkName string) string {
 	return fmt.Sprintf(`
 resource "google_compute_network" "custom-test" {
 	name = "%s"
@@ -214,29 +352,70 @@ resource "google_compute_network" "custom-test" {
 
 resource "google_compute_subnetwork" "network-with-private-google-access" {
 	name = "%s"
-	ip_cidr_range = "10.2.0.0/16"
+	ip_cidr_range = "%s"
 	region = "us-central1"
 	network = "${google_compute_network.custom-test.self_link}"
 }
-`, cnName, subnetworkName)
+`, cnName, subnetworkName, cidrRange)
 }
 
-func testAccComputeSubnetwork_secondaryIpRanges(cnName, subnetworkName string) string {
+func testAccComputeSubnetwork_secondaryIpRanges_update1(cnName, subnetworkName string) string {
 	return fmt.Sprintf(`
 resource "google_compute_network" "custom-test" {
 	name = "%s"
 	auto_create_subnetworks = false
 }
 
-resource "google_compute_subnetwork" "network-with-private-secondary-ip-range" {
+resource "google_compute_subnetwork" "network-with-private-secondary-ip-ranges" {
 	name = "%s"
 	ip_cidr_range = "10.2.0.0/16"
 	region = "us-central1"
 	network = "${google_compute_network.custom-test.self_link}"
 	secondary_ip_range {
-		range_name = "tf-test-secondary-range"
-		ip_cidr_range = "192.168.1.0/24"
+		range_name = "tf-test-secondary-range-update1"
+		ip_cidr_range = "192.168.10.0/24"
 	}
 }
 `, cnName, subnetworkName)
+}
+
+func testAccComputeSubnetwork_secondaryIpRanges_update2(cnName, subnetworkName string) string {
+	return fmt.Sprintf(`
+resource "google_compute_network" "custom-test" {
+	name = "%s"
+	auto_create_subnetworks = false
+}
+
+resource "google_compute_subnetwork" "network-with-private-secondary-ip-ranges" {
+	name = "%s"
+	ip_cidr_range = "10.2.0.0/16"
+	region = "us-central1"
+	network = "${google_compute_network.custom-test.self_link}"
+	secondary_ip_range {
+		range_name = "tf-test-secondary-range-update1"
+		ip_cidr_range = "192.168.10.0/24"
+	}
+	secondary_ip_range {
+		range_name = "tf-test-secondary-range-update2"
+		ip_cidr_range = "192.168.11.0/24"
+	},
+}
+`, cnName, subnetworkName)
+}
+
+func testAccComputeSubnetwork_flowLogs(cnName, subnetworkName string, enableLogs bool) string {
+	return fmt.Sprintf(`
+resource "google_compute_network" "custom-test" {
+	name = "%s"
+	auto_create_subnetworks = false
+}
+
+resource "google_compute_subnetwork" "network-with-flow-logs" {
+	name = "%s"
+	ip_cidr_range = "10.0.0.0/16"
+	region = "us-central1"
+	network = "${google_compute_network.custom-test.self_link}"
+	enable_flow_logs = %v
+}
+`, cnName, subnetworkName, enableLogs)
 }

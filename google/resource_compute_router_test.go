@@ -10,6 +10,8 @@ import (
 )
 
 func TestAccComputeRouter_basic(t *testing.T) {
+	t.Parallel()
+
 	resourceRegion := "europe-west1"
 	resource.Test(t, resource.TestCase{
 		PreCheck:     func() { testAccPreCheck(t) },
@@ -25,11 +27,18 @@ func TestAccComputeRouter_basic(t *testing.T) {
 						"google_compute_router.foobar", "region", resourceRegion),
 				),
 			},
+			resource.TestStep{
+				ResourceName:      "google_compute_router.foobar",
+				ImportState:       true,
+				ImportStateVerify: true,
+			},
 		},
 	})
 }
 
 func TestAccComputeRouter_noRegion(t *testing.T) {
+	t.Parallel()
+
 	providerRegion := "us-central1"
 	resource.Test(t, resource.TestCase{
 		PreCheck:     func() { testAccPreCheck(t) },
@@ -45,20 +54,10 @@ func TestAccComputeRouter_noRegion(t *testing.T) {
 						"google_compute_router.foobar", "region", providerRegion),
 				),
 			},
-		},
-	})
-}
-
-func TestAccComputeRouter_networkLink(t *testing.T) {
-	resource.Test(t, resource.TestCase{
-		PreCheck:     func() { testAccPreCheck(t) },
-		Providers:    testAccProviders,
-		CheckDestroy: testAccCheckComputeRouterDestroy,
-		Steps: []resource.TestStep{
 			resource.TestStep{
-				Config: testAccComputeRouterNetworkLink(),
-				Check: testAccCheckComputeRouterExists(
-					"google_compute_router.foobar"),
+				ResourceName:      "google_compute_router.foobar",
+				ImportState:       true,
+				ImportStateVerify: true,
 			},
 		},
 	})
@@ -140,7 +139,7 @@ func testAccComputeRouterBasic(resourceRegion string) string {
 			name = "router-test-%s"
 		}
 		resource "google_compute_subnetwork" "foobar" {
-			name = "router-test-%s"
+			name = "router-test-subnetwork-%s"
 			network = "${google_compute_network.foobar.self_link}"
 			ip_cidr_range = "10.0.0.0/16"
 			region = "%s"
@@ -163,7 +162,7 @@ func testAccComputeRouterNoRegion(providerRegion string) string {
 			name = "router-test-%s"
 		}
 		resource "google_compute_subnetwork" "foobar" {
-			name = "router-test-%s"
+			name = "router-test-subnetwork-%s"
 			network = "${google_compute_network.foobar.self_link}"
 			ip_cidr_range = "10.0.0.0/16"
 			region = "%s"
@@ -176,27 +175,4 @@ func testAccComputeRouterNoRegion(providerRegion string) string {
 			}
 		}
 	`, testId, testId, providerRegion, testId)
-}
-
-func testAccComputeRouterNetworkLink() string {
-	testId := acctest.RandString(10)
-	return fmt.Sprintf(`
-		resource "google_compute_network" "foobar" {
-			name = "router-test-%s"
-		}
-		resource "google_compute_subnetwork" "foobar" {
-			name = "router-test-%s"
-			network = "${google_compute_network.foobar.self_link}"
-			ip_cidr_range = "10.0.0.0/16"
-			region = "europe-west1"
-		}
-		resource "google_compute_router" "foobar" {
-			name = "router-test-%s"
-			region = "${google_compute_subnetwork.foobar.region}"
-			network = "${google_compute_network.foobar.self_link}"
-			bgp {
-				asn = 64514
-			}
-		}
-	`, testId, testId, testId)
 }

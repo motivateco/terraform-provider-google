@@ -28,7 +28,6 @@ func resourceComputeForwardingRule() *schema.Resource {
 			"target": &schema.Schema{
 				Type:     schema.TypeString,
 				Optional: true,
-				ForceNew: false,
 			},
 
 			"backend_service": &schema.Schema{
@@ -51,10 +50,11 @@ func resourceComputeForwardingRule() *schema.Resource {
 			},
 
 			"ip_protocol": &schema.Schema{
-				Type:     schema.TypeString,
-				Optional: true,
-				ForceNew: true,
-				Computed: true,
+				Type:             schema.TypeString,
+				Optional:         true,
+				ForceNew:         true,
+				Computed:         true,
+				DiffSuppressFunc: caseDiffSuppress,
 			},
 
 			"load_balancing_scheme": &schema.Schema{
@@ -65,22 +65,18 @@ func resourceComputeForwardingRule() *schema.Resource {
 			},
 
 			"network": &schema.Schema{
-				Type:     schema.TypeString,
-				Optional: true,
-				ForceNew: true,
-				Computed: true,
+				Type:             schema.TypeString,
+				Optional:         true,
+				ForceNew:         true,
+				Computed:         true,
+				DiffSuppressFunc: compareSelfLinkOrResourceName,
 			},
 
 			"port_range": &schema.Schema{
-				Type:     schema.TypeString,
-				Optional: true,
-				ForceNew: true,
-				DiffSuppressFunc: func(k, old, new string, d *schema.ResourceData) bool {
-					if old == new+"-"+new {
-						return true
-					}
-					return false
-				},
+				Type:             schema.TypeString,
+				Optional:         true,
+				ForceNew:         true,
+				DiffSuppressFunc: portRangeDiffSuppress,
 			},
 
 			"ports": &schema.Schema{
@@ -112,10 +108,11 @@ func resourceComputeForwardingRule() *schema.Resource {
 			},
 
 			"subnetwork": &schema.Schema{
-				Type:     schema.TypeString,
-				Optional: true,
-				ForceNew: true,
-				Computed: true,
+				Type:             schema.TypeString,
+				Optional:         true,
+				ForceNew:         true,
+				Computed:         true,
+				DiffSuppressFunc: compareSelfLinkOrResourceName,
 			},
 		},
 	}
@@ -123,6 +120,16 @@ func resourceComputeForwardingRule() *schema.Resource {
 
 func resourceComputeForwardingRuleCreate(d *schema.ResourceData, meta interface{}) error {
 	config := meta.(*Config)
+
+	network, err := ParseNetworkFieldValue(d.Get("network").(string), d, config)
+	if err != nil {
+		return err
+	}
+
+	subnetwork, err := ParseSubnetworkFieldValue(d.Get("subnetwork").(string), d, config)
+	if err != nil {
+		return err
+	}
 
 	region, err := getRegion(d, config)
 	if err != nil {
@@ -147,10 +154,10 @@ func resourceComputeForwardingRuleCreate(d *schema.ResourceData, meta interface{
 		Description:         d.Get("description").(string),
 		LoadBalancingScheme: d.Get("load_balancing_scheme").(string),
 		Name:                d.Get("name").(string),
-		Network:             d.Get("network").(string),
+		Network:             network.RelativeLink(),
 		PortRange:           d.Get("port_range").(string),
 		Ports:               ports,
-		Subnetwork:          d.Get("subnetwork").(string),
+		Subnetwork:          subnetwork.RelativeLink(),
 		Target:              d.Get("target").(string),
 	}
 
@@ -164,7 +171,7 @@ func resourceComputeForwardingRuleCreate(d *schema.ResourceData, meta interface{
 	// It probably maybe worked, so store the ID now
 	d.SetId(frule.Name)
 
-	err = computeOperationWait(config, op, project, "Creating Fowarding Rule")
+	err = computeOperationWait(config.clientCompute, op, project, "Creating Fowarding Rule")
 	if err != nil {
 		return err
 	}
@@ -196,7 +203,7 @@ func resourceComputeForwardingRuleUpdate(d *schema.ResourceData, meta interface{
 			return fmt.Errorf("Error updating target: %s", err)
 		}
 
-		err = computeOperationWait(config, op, project, "Updating Forwarding Rule")
+		err = computeOperationWait(config.clientCompute, op, project, "Updating Forwarding Rule")
 		if err != nil {
 			return err
 		}
@@ -266,7 +273,7 @@ func resourceComputeForwardingRuleDelete(d *schema.ResourceData, meta interface{
 		return fmt.Errorf("Error deleting ForwardingRule: %s", err)
 	}
 
-	err = computeOperationWait(config, op, project, "Deleting Forwarding Rule")
+	err = computeOperationWait(config.clientCompute, op, project, "Deleting Forwarding Rule")
 	if err != nil {
 		return err
 	}

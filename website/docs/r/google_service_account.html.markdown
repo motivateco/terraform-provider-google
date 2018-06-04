@@ -1,7 +1,7 @@
 ---
 layout: "google"
 page_title: "Google: google_service_account"
-sidebar_current: "docs-google-service-account"
+sidebar_current: "docs-google-service-account-x"
 description: |-
  Allows management of a Google Cloud Platform service account.
 ---
@@ -20,21 +20,6 @@ resource "google_service_account" "object_viewer" {
   account_id   = "object-viewer"
   display_name = "Object viewer"
 }
-
-resource "google_project_iam_policy" "my_project_policy" {
-  project     = "your-project-id"
-  policy_data = "${data.google_iam_policy.admin.policy_data}"
-}
-
-data "google_iam_policy" "admin" {
-  binding {
-    role = "roles/storage.objectViewer"
-
-    members = [
-      "serviceAccount:${google_service_account.object_viewer.email}",
-    ]
-  }
-}
 ```
 
 ## Argument Reference
@@ -47,16 +32,14 @@ The following arguments are supported:
 * `display_name` - (Optional) The display name for the service account.
     Can be updated without creating a new resource.
 
-* `project` - (Optional) The project that the service account will be created in.
+* `project` - (Optional) The ID of the project that the service account will be created in.
     Defaults to the provider project configuration.
 
 * `policy_data` - (DEPRECATED, Optional) The `google_iam_policy` data source that represents
     the IAM policy that will be applied to the service account. The policy will be
     merged with any existing policy.
 
-    This attribute has been deprecated. Use the `google_project_iam_policy` resource instead. See example above.
-
-    Changing this updates the policy.
+    This attribute has been deprecated. Use the [google_service_account_iam_* resources](google_service_account_iam.html) instead.
 
     Deleting this removes the policy declared in Terraform. Any policy bindings
     associated with the project before Terraform was used are not deleted.
@@ -73,3 +56,11 @@ exported:
 * `name` - The fully-qualified name of the service account.
 
 * `unique_id` - The unique id of the service account.
+
+## Import
+
+Service accounts can be imported using their URI, e.g.
+
+```
+$ terraform import google_service_account.my_sa projects/my-project/serviceAccounts/my-sa@my-project.iam.gserviceaccount.com
+```

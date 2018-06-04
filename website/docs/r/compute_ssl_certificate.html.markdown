@@ -70,13 +70,13 @@ The following arguments are supported:
 * `name` - (Optional) A unique name for the SSL certificate. If you leave
   this blank, Terraform will auto-generate a unique name.
 
-* `name_prefix` - (Optional) Creates a unique name beginning with the specified
+* `name_prefix` - (Deprecated, Optional) Creates a unique name beginning with the specified
   prefix. Conflicts with `name`.
 
 * `description` - (Optional) An optional description of this resource.
     Changing this forces a new resource to be created.
 
-* `project` - (Optional) The project in which the resource belongs. If it
+* `project` - (Optional) The ID of the project in which the resource belongs. If it
     is not provided, the provider project is used.
 
 ## Attributes Reference
@@ -84,9 +84,17 @@ The following arguments are supported:
 In addition to the arguments listed above, the following computed attributes are
 exported:
 
-* `id` - A unique ID for the certificated, assigned by GCE.
+* `certificate_id` - A unique ID for the certificate, assigned by GCE.
 
 * `self_link` - The URI of the created resource.
 
 [1]: /docs/providers/google/r/compute_target_https_proxy.html
 [2]: /docs/configuration/resources.html#lifecycle
+
+## Import
+
+SSL certificate can be imported using the `name`, e.g.
+
+```
+$ terraform import compute_ssl_certificate.html.foobar foobar
+```

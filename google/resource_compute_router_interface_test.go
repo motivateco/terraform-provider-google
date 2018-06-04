@@ -10,6 +10,8 @@ import (
 )
 
 func TestAccComputeRouterInterface_basic(t *testing.T) {
+	t.Parallel()
+
 	testId := acctest.RandString(10)
 	resource.Test(t, resource.TestCase{
 		PreCheck:     func() { testAccPreCheck(t) },
@@ -20,6 +22,11 @@ func TestAccComputeRouterInterface_basic(t *testing.T) {
 				Config: testAccComputeRouterInterfaceBasic(testId),
 				Check: testAccCheckComputeRouterInterfaceExists(
 					"google_compute_router_interface.foobar"),
+			},
+			resource.TestStep{
+				ResourceName:      "google_compute_router_interface.foobar",
+				ImportState:       true,
+				ImportStateVerify: true,
 			},
 			resource.TestStep{
 				Config: testAccComputeRouterInterfaceKeepRouter(testId),
@@ -156,7 +163,7 @@ func testAccComputeRouterInterfaceBasic(testId string) string {
 			name = "router-interface-test-%s"
 		}
 		resource "google_compute_subnetwork" "foobar" {
-			name = "router-interface-test-%s"
+			name = "router-interface-test-subnetwork-%s"
 			network = "${google_compute_network.foobar.self_link}"
 			ip_cidr_range = "10.0.0.0/16"
 			region = "us-central1"
@@ -225,7 +232,7 @@ func testAccComputeRouterInterfaceKeepRouter(testId string) string {
 			name = "router-interface-test-%s"
 		}
 		resource "google_compute_subnetwork" "foobar" {
-			name = "router-interface-test-%s"
+			name = "router-interface-test-subnetwork-%s"
 			network = "${google_compute_network.foobar.self_link}"
 			ip_cidr_range = "10.0.0.0/16"
 			region = "us-central1"

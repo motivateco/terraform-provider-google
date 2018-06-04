@@ -9,7 +9,34 @@ import (
 	"github.com/hashicorp/terraform/terraform"
 )
 
+func TestIpv6AddressDiffSuppress(t *testing.T) {
+	cases := map[string]struct {
+		Old, New       string
+		ShouldSuppress bool
+	}{
+		"compact form should suppress diff": {
+			Old:            "2a03:b0c0:1:e0::29b:8001",
+			New:            "2a03:b0c0:0001:00e0:0000:0000:029b:8001",
+			ShouldSuppress: true,
+		},
+		"different address should not suppress diff": {
+			Old:            "2a03:b0c0:1:e00::29b:8001",
+			New:            "2a03:b0c0:0001:00e0:0000:0000:029b:8001",
+			ShouldSuppress: false,
+		},
+	}
+
+	for tn, tc := range cases {
+		shouldSuppress := ipv6AddressDiffSuppress("", tc.Old, tc.New, nil)
+		if shouldSuppress != tc.ShouldSuppress {
+			t.Errorf("%s: expected %t", tn, tc.ShouldSuppress)
+		}
+	}
+}
+
 func TestAccDnsRecordSet_basic(t *testing.T) {
+	t.Parallel()
+
 	zoneName := fmt.Sprintf("dnszone-test-%s", acctest.RandString(10))
 	resource.Test(t, resource.TestCase{
 		PreCheck:     func() { testAccPreCheck(t) },
@@ -23,11 +50,19 @@ func TestAccDnsRecordSet_basic(t *testing.T) {
 						"google_dns_record_set.foobar", zoneName),
 				),
 			},
+			resource.TestStep{
+				ResourceName:      "google_dns_record_set.foobar",
+				ImportStateId:     fmt.Sprintf("%s/test-record.%s.hashicorptest.com./A", zoneName, zoneName),
+				ImportState:       true,
+				ImportStateVerify: true,
+			},
 		},
 	})
 }
 
 func TestAccDnsRecordSet_modify(t *testing.T) {
+	t.Parallel()
+
 	zoneName := fmt.Sprintf("dnszone-test-%s", acctest.RandString(10))
 	resource.Test(t, resource.TestCase{
 		PreCheck:     func() { testAccPreCheck(t) },
@@ -60,6 +95,8 @@ func TestAccDnsRecordSet_modify(t *testing.T) {
 }
 
 func TestAccDnsRecordSet_changeType(t *testing.T) {
+	t.Parallel()
+
 	zoneName := fmt.Sprintf("dnszone-test-%s", acctest.RandString(10))
 	resource.Test(t, resource.TestCase{
 		PreCheck:     func() { testAccPreCheck(t) },
@@ -75,6 +112,92 @@ func TestAccDnsRecordSet_changeType(t *testing.T) {
 			},
 			resource.TestStep{
 				Config: testAccDnsRecordSet_bigChange(zoneName, 600),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheckDnsRecordSetExists(
+						"google_dns_record_set.foobar", zoneName),
+				),
+			},
+		},
+	})
+}
+
+func TestAccDnsRecordSet_ns(t *testing.T) {
+	t.Parallel()
+
+	zoneName := fmt.Sprintf("dnszone-test-ns-%s", acctest.RandString(10))
+	resource.Test(t, resource.TestCase{
+		PreCheck:     func() { testAccPreCheck(t) },
+		Providers:    testAccProviders,
+		CheckDestroy: testAccCheckDnsRecordSetDestroy,
+		Steps: []resource.TestStep{
+			resource.TestStep{
+				Config: testAccDnsRecordSet_ns(zoneName, 300),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheckDnsRecordSetExists(
+						"google_dns_record_set.foobar", zoneName),
+				),
+			},
+			resource.TestStep{
+				ResourceName:      "google_dns_record_set.foobar",
+				ImportStateId:     fmt.Sprintf("%s/%s.hashicorptest.com./NS", zoneName, zoneName),
+				ImportState:       true,
+				ImportStateVerify: true,
+			},
+		},
+	})
+}
+
+func TestAccDnsRecordSet_nestedNS(t *testing.T) {
+	t.Parallel()
+
+	zoneName := fmt.Sprintf("dnszone-test-ns-%s", acctest.RandString(10))
+	resource.Test(t, resource.TestCase{
+		PreCheck:     func() { testAccPreCheck(t) },
+		Providers:    testAccProviders,
+		CheckDestroy: testAccCheckDnsRecordSetDestroy,
+		Steps: []resource.TestStep{
+			resource.TestStep{
+				Config: testAccDnsRecordSet_nestedNS(zoneName, 300),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheckDnsRecordSetExists(
+						"google_dns_record_set.foobar", zoneName),
+				),
+			},
+		},
+	})
+}
+
+func TestAccDnsRecordSet_quotedTXT(t *testing.T) {
+	t.Parallel()
+
+	zoneName := fmt.Sprintf("dnszone-test-txt-%s", acctest.RandString(10))
+	resource.Test(t, resource.TestCase{
+		PreCheck:     func() { testAccPreCheck(t) },
+		Providers:    testAccProviders,
+		CheckDestroy: testAccCheckDnsRecordSetDestroy,
+		Steps: []resource.TestStep{
+			resource.TestStep{
+				Config: testAccDnsRecordSet_quotedTXT(zoneName, 300),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheckDnsRecordSetExists(
+						"google_dns_record_set.foobar", zoneName),
+				),
+			},
+		},
+	})
+}
+
+func TestAccDnsRecordSet_uppercaseMX(t *testing.T) {
+	t.Parallel()
+
+	zoneName := fmt.Sprintf("dnszone-test-txt-%s", acctest.RandString(10))
+	resource.Test(t, resource.TestCase{
+		PreCheck:     func() { testAccPreCheck(t) },
+		Providers:    testAccProviders,
+		CheckDestroy: testAccCheckDnsRecordSetDestroy,
+		Steps: []resource.TestStep{
+			resource.TestStep{
+				Config: testAccDnsRecordSet_uppercaseMX(zoneName, 300),
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheckDnsRecordSetExists(
 						"google_dns_record_set.foobar", zoneName),
@@ -138,32 +261,106 @@ func testAccDnsRecordSet_basic(zoneName string, addr2 string, ttl int) string {
 	return fmt.Sprintf(`
 	resource "google_dns_managed_zone" "parent-zone" {
 		name = "%s"
-		dns_name = "hashicorptest.com."
+		dns_name = "%s.hashicorptest.com."
 		description = "Test Description"
 	}
 	resource "google_dns_record_set" "foobar" {
 		managed_zone = "${google_dns_managed_zone.parent-zone.name}"
-		name = "test-record.hashicorptest.com."
+		name = "test-record.%s.hashicorptest.com."
 		type = "A"
 		rrdatas = ["127.0.0.1", "%s"]
 		ttl = %d
 	}
-	`, zoneName, addr2, ttl)
+	`, zoneName, zoneName, zoneName, addr2, ttl)
+}
+
+func testAccDnsRecordSet_ns(name string, ttl int) string {
+	return fmt.Sprintf(`
+	resource "google_dns_managed_zone" "parent-zone" {
+		name = "%s"
+		dns_name = "%s.hashicorptest.com."
+		description = "Test Description"
+	}
+	resource "google_dns_record_set" "foobar" {
+		managed_zone = "${google_dns_managed_zone.parent-zone.name}"
+		name = "%s.hashicorptest.com."
+		type = "NS"
+		rrdatas = ["ns.hashicorp.services.", "ns2.hashicorp.services."]
+		ttl = %d
+	}
+	`, name, name, name, ttl)
+}
+
+func testAccDnsRecordSet_nestedNS(name string, ttl int) string {
+	return fmt.Sprintf(`
+	resource "google_dns_managed_zone" "parent-zone" {
+		name = "%s"
+		dns_name = "%s.hashicorptest.com."
+		description = "Test Description"
+	}
+	resource "google_dns_record_set" "foobar" {
+		managed_zone = "${google_dns_managed_zone.parent-zone.name}"
+		name = "nested.%s.hashicorptest.com."
+		type = "NS"
+		rrdatas = ["ns.hashicorp.services.", "ns2.hashicorp.services."]
+		ttl = %d
+	}
+	`, name, name, name, ttl)
 }
 
 func testAccDnsRecordSet_bigChange(zoneName string, ttl int) string {
 	return fmt.Sprintf(`
 	resource "google_dns_managed_zone" "parent-zone" {
 		name = "%s"
-		dns_name = "hashicorptest.com."
+		dns_name = "%s.hashicorptest.com."
 		description = "Test Description"
 	}
 	resource "google_dns_record_set" "foobar" {
 		managed_zone = "${google_dns_managed_zone.parent-zone.name}"
-		name = "test-record.hashicorptest.com."
+		name = "test-record.%s.hashicorptest.com."
 		type = "CNAME"
 		rrdatas = ["www.terraform.io."]
 		ttl = %d
 	}
-	`, zoneName, ttl)
+	`, zoneName, zoneName, zoneName, ttl)
+}
+
+func testAccDnsRecordSet_quotedTXT(name string, ttl int) string {
+	return fmt.Sprintf(`
+	resource "google_dns_managed_zone" "parent-zone" {
+		name = "%s"
+		dns_name = "%s.hashicorptest.com."
+		description = "Test Description"
+	}
+	resource "google_dns_record_set" "foobar" {
+		managed_zone = "${google_dns_managed_zone.parent-zone.name}"
+		name = "test-record.%s.hashicorptest.com."
+		type = "TXT"
+		rrdatas = ["test", "\"quoted test\""]
+		ttl = %d
+	}
+	`, name, name, name, ttl)
+}
+
+func testAccDnsRecordSet_uppercaseMX(name string, ttl int) string {
+	return fmt.Sprintf(`
+	resource "google_dns_managed_zone" "parent-zone" {
+		name = "%s"
+		dns_name = "%s.hashicorptest.com."
+		description = "Test Description"
+	}
+	resource "google_dns_record_set" "foobar" {
+		managed_zone = "${google_dns_managed_zone.parent-zone.name}"
+		name = "test-record.%s.hashicorptest.com."
+		type = "MX"
+		rrdatas = [
+			"1 ASPMX.L.GOOGLE.COM.",
+			"5 ALT1.ASPMX.L.GOOGLE.COM.",
+			"5 ALT2.ASPMX.L.GOOGLE.COM.",
+			"10 ASPMX2.GOOGLEMAIL.COM.",
+			"10 ASPMX3.GOOGLEMAIL.COM.",
+		]
+		ttl = %d
+	}
+	`, name, name, name, ttl)
 }

@@ -12,6 +12,8 @@ import (
 )
 
 func TestAccComputeHealthCheck_tcp(t *testing.T) {
+	t.Parallel()
+
 	var healthCheck compute.HealthCheck
 
 	hckName := fmt.Sprintf("tf-test-%s", acctest.RandString(10))
@@ -31,11 +33,18 @@ func TestAccComputeHealthCheck_tcp(t *testing.T) {
 					testAccCheckComputeHealthCheckTcpPort(80, &healthCheck),
 				),
 			},
+			resource.TestStep{
+				ResourceName:      "google_compute_health_check.foobar",
+				ImportState:       true,
+				ImportStateVerify: true,
+			},
 		},
 	})
 }
 
 func TestAccComputeHealthCheck_tcp_update(t *testing.T) {
+	t.Parallel()
+
 	var healthCheck compute.HealthCheck
 
 	hckName := fmt.Sprintf("tf-test-%s", acctest.RandString(10))
@@ -70,6 +79,8 @@ func TestAccComputeHealthCheck_tcp_update(t *testing.T) {
 }
 
 func TestAccComputeHealthCheck_ssl(t *testing.T) {
+	t.Parallel()
+
 	var healthCheck compute.HealthCheck
 
 	hckName := fmt.Sprintf("tf-test-%s", acctest.RandString(10))
@@ -88,11 +99,18 @@ func TestAccComputeHealthCheck_ssl(t *testing.T) {
 						3, 3, &healthCheck),
 				),
 			},
+			resource.TestStep{
+				ResourceName:      "google_compute_health_check.foobar",
+				ImportState:       true,
+				ImportStateVerify: true,
+			},
 		},
 	})
 }
 
 func TestAccComputeHealthCheck_http(t *testing.T) {
+	t.Parallel()
+
 	var healthCheck compute.HealthCheck
 
 	hckName := fmt.Sprintf("tf-test-%s", acctest.RandString(10))
@@ -111,11 +129,18 @@ func TestAccComputeHealthCheck_http(t *testing.T) {
 						3, 3, &healthCheck),
 				),
 			},
+			resource.TestStep{
+				ResourceName:      "google_compute_health_check.foobar",
+				ImportState:       true,
+				ImportStateVerify: true,
+			},
 		},
 	})
 }
 
 func TestAccComputeHealthCheck_https(t *testing.T) {
+	t.Parallel()
+
 	var healthCheck compute.HealthCheck
 
 	hckName := fmt.Sprintf("tf-test-%s", acctest.RandString(10))
@@ -134,11 +159,47 @@ func TestAccComputeHealthCheck_https(t *testing.T) {
 						3, 3, &healthCheck),
 				),
 			},
+			resource.TestStep{
+				ResourceName:      "google_compute_health_check.foobar",
+				ImportState:       true,
+				ImportStateVerify: true,
+			},
+		},
+	})
+}
+
+func TestAccComputeHealthCheck_typeTransition(t *testing.T) {
+	t.Parallel()
+
+	hckName := fmt.Sprintf("tf-test-%s", acctest.RandString(10))
+
+	resource.Test(t, resource.TestCase{
+		PreCheck:     func() { testAccPreCheck(t) },
+		Providers:    testAccProviders,
+		CheckDestroy: testAccCheckComputeHealthCheckDestroy,
+		Steps: []resource.TestStep{
+			resource.TestStep{
+				Config: testAccComputeHealthCheck_https(hckName),
+			},
+			resource.TestStep{
+				Config: testAccComputeHealthCheck_http(hckName),
+			},
+			resource.TestStep{
+				Config: testAccComputeHealthCheck_ssl(hckName),
+			},
+			resource.TestStep{
+				Config: testAccComputeHealthCheck_tcp(hckName),
+			},
+			resource.TestStep{
+				Config: testAccComputeHealthCheck_https(hckName),
+			},
 		},
 	})
 }
 
 func TestAccComputeHealthCheck_tcpAndSsl_shouldFail(t *testing.T) {
+	t.Parallel()
+
 	hckName := fmt.Sprintf("tf-test-%s", acctest.RandString(10))
 
 	resource.Test(t, resource.TestCase{
@@ -197,16 +258,6 @@ func testAccCheckComputeHealthCheckExists(n string, healthCheck *compute.HealthC
 
 		*healthCheck = *found
 
-		return nil
-	}
-}
-
-func testAccCheckErrorCreating(n string) resource.TestCheckFunc {
-	return func(s *terraform.State) error {
-		_, ok := s.RootModule().Resources[n]
-		if ok {
-			return fmt.Errorf("HealthCheck %s created successfully with bad config", n)
-		}
 		return nil
 	}
 }

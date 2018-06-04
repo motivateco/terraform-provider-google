@@ -12,6 +12,8 @@ import (
 )
 
 func TestAccComputeGlobalForwardingRule_basic(t *testing.T) {
+	t.Parallel()
+
 	fr := fmt.Sprintf("forwardrule-test-%s", acctest.RandString(10))
 	proxy1 := fmt.Sprintf("forwardrule-test-%s", acctest.RandString(10))
 	proxy2 := fmt.Sprintf("forwardrule-test-%s", acctest.RandString(10))
@@ -34,11 +36,18 @@ func TestAccComputeGlobalForwardingRule_basic(t *testing.T) {
 					testAccCheckComputeBetaGlobalForwardingRuleIpVersion("google_compute_global_forwarding_rule.foobar", ""),
 				),
 			},
+			resource.TestStep{
+				ResourceName:      "google_compute_global_forwarding_rule.foobar",
+				ImportState:       true,
+				ImportStateVerify: true,
+			},
 		},
 	})
 }
 
 func TestAccComputeGlobalForwardingRule_update(t *testing.T) {
+	t.Parallel()
+
 	fr := fmt.Sprintf("forwardrule-test-%s", acctest.RandString(10))
 	proxy1 := fmt.Sprintf("forwardrule-test-%s", acctest.RandString(10))
 	proxy2 := fmt.Sprintf("forwardrule-test-%s", acctest.RandString(10))
@@ -71,6 +80,8 @@ func TestAccComputeGlobalForwardingRule_update(t *testing.T) {
 }
 
 func TestAccComputeGlobalForwardingRule_ipv6(t *testing.T) {
+	t.Parallel()
+
 	var frule computeBeta.ForwardingRule
 
 	fr := fmt.Sprintf("forwardrule-test-%s", acctest.RandString(10))
@@ -93,11 +104,18 @@ func TestAccComputeGlobalForwardingRule_ipv6(t *testing.T) {
 					testAccCheckComputeBetaGlobalForwardingRuleIpVersion("google_compute_global_forwarding_rule.foobar", "IPV6"),
 				),
 			},
+			resource.TestStep{
+				ResourceName:      "google_compute_global_forwarding_rule.foobar",
+				ImportState:       true,
+				ImportStateVerify: true,
+			},
 		},
 	})
 }
 
 func TestAccComputeGlobalForwardingRule_labels(t *testing.T) {
+	t.Parallel()
+
 	var frule computeBeta.ForwardingRule
 
 	fr := fmt.Sprintf("forwardrule-test-%s", acctest.RandString(10))

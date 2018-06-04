@@ -10,6 +10,8 @@ import (
 )
 
 func TestAccPubsubSubscription_basic(t *testing.T) {
+	t.Parallel()
+
 	topic := fmt.Sprintf("tf-test-topic-%s", acctest.RandString(10))
 	subscription := fmt.Sprintf("tf-test-sub-%s", acctest.RandString(10))
 
@@ -20,11 +22,12 @@ func TestAccPubsubSubscription_basic(t *testing.T) {
 		Steps: []resource.TestStep{
 			{
 				Config: testAccPubsubSubscription_basic(topic, subscription),
-				Check: resource.ComposeTestCheckFunc(
-					testAccPubsubSubscriptionExists(
-						"google_pubsub_subscription.foobar_sub"),
-					resource.TestCheckResourceAttrSet("google_pubsub_subscription.foobar_sub", "path"),
-				),
+			},
+			resource.TestStep{
+				ResourceName:      "google_pubsub_subscription.foo",
+				ImportStateId:     subscription,
+				ImportState:       true,
+				ImportStateVerify: true,
 			},
 		},
 	})
@@ -58,35 +61,43 @@ func testAccCheckPubsubSubscriptionDestroy(s *terraform.State) error {
 	return nil
 }
 
-func testAccPubsubSubscriptionExists(n string) resource.TestCheckFunc {
-	return func(s *terraform.State) error {
-		rs, ok := s.RootModule().Resources[n]
-		if !ok {
-			return fmt.Errorf("Not found: %s", n)
-		}
-
-		if rs.Primary.ID == "" {
-			return fmt.Errorf("No ID is set")
-		}
-		config := testAccProvider.Meta().(*Config)
-		_, err := config.clientPubsub.Projects.Subscriptions.Get(rs.Primary.ID).Do()
-		if err != nil {
-			return fmt.Errorf("Subscription does not exist")
-		}
-
-		return nil
-	}
-}
-
 func testAccPubsubSubscription_basic(topic, subscription string) string {
 	return fmt.Sprintf(`
-resource "google_pubsub_topic" "foobar_sub" {
+resource "google_pubsub_topic" "foo" {
 	name = "%s"
 }
 
-resource "google_pubsub_subscription" "foobar_sub" {
+resource "google_pubsub_subscription" "foo" {
 	name                 = "%s"
-	topic                = "${google_pubsub_topic.foobar_sub.name}"
+	topic                = "${google_pubsub_topic.foo.name}"
 	ack_deadline_seconds = 20
 }`, topic, subscription)
+}
+
+func TestGetComputedTopicName(t *testing.T) {
+	type testData struct {
+		project  string
+		topic    string
+		expected string
+	}
+
+	var testCases = []testData{
+		testData{
+			project:  "my-project",
+			topic:    "my-topic",
+			expected: "projects/my-project/topics/my-topic",
+		},
+		testData{
+			project:  "my-project",
+			topic:    "projects/another-project/topics/my-topic",
+			expected: "projects/another-project/topics/my-topic",
+		},
+	}
+
+	for _, testCase := range testCases {
+		computedTopicName := getComputedTopicName(testCase.project, testCase.topic)
+		if computedTopicName != testCase.expected {
+			t.Fatalf("bad computed topic name: %s' => expected %s", computedTopicName, testCase.expected)
+		}
+	}
 }

@@ -2,15 +2,18 @@ package google
 
 import (
 	"fmt"
+	"strconv"
+	"testing"
+
 	"github.com/hashicorp/terraform/helper/acctest"
 	"github.com/hashicorp/terraform/helper/resource"
 	"github.com/hashicorp/terraform/terraform"
 	"google.golang.org/api/logging/v2"
-	"strconv"
-	"testing"
 )
 
 func TestAccLoggingProjectSink_basic(t *testing.T) {
+	t.Parallel()
+
 	sinkName := "tf-test-sink-" + acctest.RandString(10)
 	bucketName := "tf-test-sink-bucket-" + acctest.RandString(10)
 
@@ -22,7 +25,7 @@ func TestAccLoggingProjectSink_basic(t *testing.T) {
 		CheckDestroy: testAccCheckLoggingProjectSinkDestroy,
 		Steps: []resource.TestStep{
 			{
-				Config: testAccLoggingProjectSink_basic(sinkName, bucketName),
+				Config: testAccLoggingProjectSink_basic(sinkName, getTestProjectFromEnv(), bucketName),
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheckLoggingProjectSinkExists("google_logging_project_sink.basic", &sink),
 					testAccCheckLoggingProjectSink(&sink, "google_logging_project_sink.basic"),
@@ -33,6 +36,8 @@ func TestAccLoggingProjectSink_basic(t *testing.T) {
 }
 
 func TestAccLoggingProjectSink_uniqueWriter(t *testing.T) {
+	t.Parallel()
+
 	sinkName := "tf-test-sink-" + acctest.RandString(10)
 	bucketName := "tf-test-sink-bucket-" + acctest.RandString(10)
 
@@ -55,6 +60,8 @@ func TestAccLoggingProjectSink_uniqueWriter(t *testing.T) {
 }
 
 func TestAccLoggingProjectSink_updatePreservesUniqueWriter(t *testing.T) {
+	t.Parallel()
+
 	sinkName := "tf-test-sink-" + acctest.RandString(10)
 	bucketName := "tf-test-sink-bucket-" + acctest.RandString(10)
 	updatedBucketName := "tf-test-sink-bucket-" + acctest.RandString(10)
@@ -94,6 +101,35 @@ func TestAccLoggingProjectSink_updatePreservesUniqueWriter(t *testing.T) {
 			sinkBefore.WriterIdentity, sinkAfter.WriterIdentity)
 	}
 }
+
+func TestAccLoggingProjectSink_heredoc(t *testing.T) {
+	t.Parallel()
+
+	sinkName := "tf-test-sink-" + acctest.RandString(10)
+	bucketName := "tf-test-sink-bucket-" + acctest.RandString(10)
+
+	var sink logging.LogSink
+
+	resource.Test(t, resource.TestCase{
+		PreCheck:     func() { testAccPreCheck(t) },
+		Providers:    testAccProviders,
+		CheckDestroy: testAccCheckLoggingProjectSinkDestroy,
+		Steps: []resource.TestStep{
+			{
+				Config: testAccLoggingProjectSink_heredoc(sinkName, getTestProjectFromEnv(), bucketName),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheckLoggingProjectSinkExists("google_logging_project_sink.heredoc", &sink),
+					testAccCheckLoggingProjectSink(&sink, "google_logging_project_sink.heredoc"),
+				),
+			}, {
+				ResourceName:      "google_logging_project_sink.heredoc",
+				ImportState:       true,
+				ImportStateVerify: true,
+			},
+		},
+	})
+}
+
 func testAccCheckLoggingProjectSinkDestroy(s *terraform.State) error {
 	config := testAccProvider.Meta().(*Config)
 
@@ -159,10 +195,11 @@ func testAccCheckLoggingProjectSink(sink *logging.LogSink, n string) resource.Te
 	}
 }
 
-func testAccLoggingProjectSink_basic(name, bucketName string) string {
+func testAccLoggingProjectSink_basic(name, project, bucketName string) string {
 	return fmt.Sprintf(`
 resource "google_logging_project_sink" "basic" {
 	name = "%s"
+	project = "%s"
 	destination = "storage.googleapis.com/${google_storage_bucket.log-bucket.name}"
 	filter = "logName=\"projects/%s/logs/compute.googleapis.com%%2Factivity_log\" AND severity>=ERROR"
 	unique_writer_identity = false
@@ -170,7 +207,7 @@ resource "google_logging_project_sink" "basic" {
 
 resource "google_storage_bucket" "log-bucket" {
 	name     = "%s"
-}`, name, getTestProjectFromEnv(), bucketName)
+}`, name, project, project, bucketName)
 }
 
 func testAccLoggingProjectSink_uniqueWriter(name, bucketName string) string {
@@ -199,4 +236,26 @@ resource "google_logging_project_sink" "unique_writer" {
 resource "google_storage_bucket" "log-bucket" {
 	name     = "%s"
 }`, name, getTestProjectFromEnv(), bucketName)
+}
+
+func testAccLoggingProjectSink_heredoc(name, project, bucketName string) string {
+	return fmt.Sprintf(`
+resource "google_logging_project_sink" "heredoc" {
+	name = "%s"
+	project = "%s"
+	destination = "storage.googleapis.com/${google_storage_bucket.log-bucket.name}"
+	filter = <<EOS
+
+	logName="projects/%s/logs/compute.googleapis.com%%2Factivity_log"
+AND severity>=ERROR
+
+
+
+  EOS
+	unique_writer_identity = false
+}
+
+resource "google_storage_bucket" "log-bucket" {
+	name     = "%s"
+}`, name, project, project, bucketName)
 }

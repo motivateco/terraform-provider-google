@@ -8,7 +8,14 @@ description: |-
 
 # google\_dns\_record\_set
 
-Manages a set of DNS records within Google Cloud DNS.
+Manages a set of DNS records within Google Cloud DNS. For more information see [the official documentation](https://cloud.google.com/dns/records/) and
+[API](https://cloud.google.com/dns/api/v1/resourceRecordSets).
+
+~> **Note:** The Google Cloud DNS API requires NS records be present at all
+times. To accommodate this, when creating NS records, the default records
+Google automatically creates will be silently overwritten.  Also, when
+destroying NS records, Terraform will not actually remove NS records, but will
+report that it did.
 
 ## Example Usage
 
@@ -30,8 +37,10 @@ resource "google_compute_instance" "frontend" {
   machine_type = "g1-small"
   zone         = "us-central1-b"
 
-  disk {
-    image = "debian-cloud/debian-8"
+  boot_disk {
+    initialize_params {
+      image = "debian-cloud/debian-8"
+    }
   }
 
   network_interface {
@@ -46,9 +55,51 @@ resource "google_dns_managed_zone" "prod" {
 }
 ```
 
-### Adding a SPF record
+### Adding an A record
 
-`\"` must be added around your `rrdatas` for a SPF record. Otherwise `rrdatas` string gets split on spaces.
+```hcl
+resource "google_dns_record_set" "a" {
+  name = "backend.${google_dns_managed_zone.prod.dns_name}"
+  managed_zone = "${google_dns_managed_zone.prod.name}"
+  type = "A"
+  ttl  = 300
+
+  rrdatas = ["8.8.8.8"]
+}
+
+resource "google_dns_managed_zone" "prod" {
+  name     = "prod-zone"
+  dns_name = "prod.mydomain.com."
+}
+```
+
+### Adding an MX record
+
+```hcl
+resource "google_dns_record_set" "mx" {
+  name = "${google_dns_managed_zone.prod.dns_name}"
+  managed_zone = "${google_dns_managed_zone.prod.name}"
+  type = "MX"
+  ttl  = 3600
+
+  rrdatas = [
+    "1 aspmx.l.google.com.",
+    "5 alt1.aspmx.l.google.com.",
+    "5 alt2.aspmx.l.google.com.",
+    "10 alt3.aspmx.l.google.com.",
+    "10 alt4.aspmx.l.google.com."
+  ]
+}
+
+resource "google_dns_managed_zone" "prod" {
+  name     = "prod-zone"
+  dns_name = "prod.mydomain.com."
+}
+```
+
+### Adding an SPF record
+
+Quotes (`""`) must be added around your `rrdatas` for a SPF record. Otherwise `rrdatas` string gets split on spaces.
 
 ```hcl
 resource "google_dns_record_set" "spf" {
@@ -84,9 +135,19 @@ The following arguments are supported:
 
 - - -
 
-* `project` - (Optional) The project in which the resource belongs. If it
+* `project` - (Optional) The ID of the project in which the resource belongs. If it
     is not provided, the provider project is used.
 
 ## Attributes Reference
 
 Only the arguments listed above are exposed as attributes.
+
+## Import
+
+DNS record set can be imported using the `zone name`, `record name` and record `type`, e.g.
+
+```
+$ terraform import google_dns_record_set.frontend prod-zone/frontend.prod.mydomain.com./A
+```
+
+Note: The record name must include the trailing dot at the end.

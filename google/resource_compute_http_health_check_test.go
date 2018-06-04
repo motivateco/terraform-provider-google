@@ -11,6 +11,8 @@ import (
 )
 
 func TestAccComputeHttpHealthCheck_basic(t *testing.T) {
+	t.Parallel()
+
 	var healthCheck compute.HttpHealthCheck
 
 	hhckName := fmt.Sprintf("tf-test-%s", acctest.RandString(10))
@@ -31,11 +33,18 @@ func TestAccComputeHttpHealthCheck_basic(t *testing.T) {
 						3, 3, &healthCheck),
 				),
 			},
+			resource.TestStep{
+				ResourceName:      "google_compute_http_health_check.foobar",
+				ImportState:       true,
+				ImportStateVerify: true,
+			},
 		},
 	})
 }
 
 func TestAccComputeHttpHealthCheck_update(t *testing.T) {
+	t.Parallel()
+
 	var healthCheck compute.HttpHealthCheck
 
 	hhckName := fmt.Sprintf("tf-test-%s", acctest.RandString(10))

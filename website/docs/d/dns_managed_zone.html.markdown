@@ -34,13 +34,13 @@ resource "google_dns_record_set" "dns" {
 
 * `name` - (Required) A unique name for the resource.
 
-* `project` - (Optional) ID of the project for the Google Cloud DNS zone.
+* `project` - (Optional) The ID of the project for the Google Cloud DNS zone.
 
 ## Attributes Reference
 
 The following attributes are exported:
 
-* `dns_name` - The DNS name of this zone, e.g. "terraform.io".
+* `dns_name` - The fully qualified DNS name of this zone, e.g. `terraform.io.`.
 
 * `description` - A textual description field.
 

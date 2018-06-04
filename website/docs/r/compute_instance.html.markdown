@@ -61,9 +61,11 @@ The following arguments are supported:
 * `boot_disk` - (Required) The boot disk for the instance.
     Structure is documented below.
 
-* `machine_type` - (Required) The machine type to create. To create a custom
-    machine type, value should be set as specified
-    [here](https://cloud.google.com/compute/docs/reference/latest/instances#machineType)
+* `machine_type` - (Required) The machine type to create.
+
+    **Note:** If you want to update this value (resize the VM) after initial creation, you must set [`allow_stopping_for_update`](#allow_stopping_for_update) to `true`.
+
+    To create a machine with a [custom type][custom-vm-types] (such as extended memory), format the value like `custom-VCPUS-MEM_IN_MB` like `custom-6-20480` for 6 vCPU and 20GB of RAM.
 
 * `name` - (Required) A unique name for the resource, required by GCE.
     Changing this forces a new resource to be created.
@@ -74,6 +76,9 @@ The following arguments are supported:
     be specified multiple times. Structure is documented below.
 
 - - -
+
+* `allow_stopping_for_update` - (Optional) If true, allows Terraform to stop the instance to update its properties.
+  If you try to update a property that requires stopping the instance without setting this field, the update will fail.
 
 * `attached_disk` - (Optional) List of disks to attach to the instance. Structure is documented below.
 
@@ -86,6 +91,12 @@ The following arguments are supported:
 
 * `description` - (Optional) A brief description of this resource.
 
+* `deletion_protection` - (Optional) Enable deletion protection on this instance. Defaults to false.
+    **Note:** you must disable deletion protection before removing the resource (e.g., via `terraform destroy`), or the instance cannot be deleted and the Terraform run will not complete successfully.
+
+* `guest_accelerator` - (Optional) List of the type and count of accelerator cards attached to the instance. Structure documented below.
+    **Note:** GPU accelerators can only be used with [`on_host_maintenance`](#on_host_maintenance) option set to TERMINATE.
+
 * `labels` - (Optional) A set of key/value label pairs to assign to the instance.
 
 * `metadata` - (Optional) Metadata key/value pairs to make available from
@@ -97,7 +108,11 @@ The following arguments are supported:
     startup-script metadata key on the created instance and thus the two
     mechanisms are not allowed to be used simultaneously.
 
-* `project` - (Optional) The project in which the resource belongs. If it
+* `min_cpu_platform` - (Optional) Specifies a minimum CPU platform for the VM instance. Applicable values are the friendly names of CPU platforms, such as
+`Intel Haswell` or `Intel Skylake`. See the complete list [here](https://cloud.google.com/compute/docs/instances/specify-min-cpu-platform).
+    **Note**: [`allow_stopping_for_update`](#allow_stopping_for_update) must be set to true in order to update this field.
+
+* `project` - (Optional) The ID of the project in which the resource belongs. If it
     is not provided, the provider project is used.
 
 * `scheduling` - (Optional) The scheduling strategy to use. More details about
@@ -108,17 +123,9 @@ The following arguments are supported:
 
 * `service_account` - (Optional) Service account to attach to the instance.
     Structure is documented below.
+    **Note**: [`allow_stopping_for_update`](#allow_stopping_for_update) must be set to true in order to update this field.
 
 * `tags` - (Optional) A list of tags to attach to the instance.
-
----
-
-* `disk` - (DEPRECATED) Disks to attach to the instance. This can be specified
-    multiple times for multiple disks. Structure is documented below.
-
-* `network` - (DEPRECATED) Networks to attach to the instance. This
-    can be specified multiple times for multiple networks. Structure is
-    documented below.
 
 ---
 
@@ -139,7 +146,7 @@ The `boot_disk` block supports:
     alongside the new instance. Either `initialize_params` or `source` must be set.
     Structure is documented below.
 
-* `source` - (Optional) The name of the existing disk (such as those managed by
+* `source` - (Optional) The name or self_link of the existing disk (such as those managed by
     `google_compute_disk`) to attach.
 
 The `initialize_params` block supports:
@@ -153,51 +160,28 @@ The `initialize_params` block supports:
     one of: the image's `self_link`, `projects/{project}/global/images/{image}`,
     `projects/{project}/global/images/family/{family}`, `global/images/{image}`,
     `global/images/family/{family}`, `family/{family}`, `{project}/{family}`,
-    `{project}/{image}`, `{family}`, or `{image}`.
+    `{project}/{image}`, `{family}`, or `{image}`. If referred by family, the
+    images names must include the family name. If they don't, use the
+    [google_compute_image data source](/docs/providers/google/d/datasource_compute_image.html).
+    For instance, the image `centos-6-v20180104` includes its family name `centos-6`.
+    These images can be referred by family name here.
 
 The `scratch_disk` block supports:
 
 * `interface` - (Optional) The disk interface to use for attaching this disk; either SCSI or NVME.
     Defaults to SCSI.
 
-(DEPRECATED) The `disk` block supports: (Note that either disk or image is required, unless
-the type is "local-ssd", in which case scratch must be true).
-
-* `disk` - The name of the existing disk (such as those managed by
-    `google_compute_disk`) to attach.
-
-* `image` - The image from which to initialize this disk. This can be
-    one of: the image's `self_link`, `projects/{project}/global/images/{image}`,
-    `projects/{project}/global/images/family/{family}`, `global/images/{image}`,
-    `global/images/family/{family}`, `family/{family}`, `{project}/{family}`,
-    `{project}/{image}`, `{family}`, or `{image}`.
-
-* `auto_delete` - (Optional) Whether or not the disk should be auto-deleted.
-    This defaults to true. Leave true for local SSDs.
-
-* `type` - (Optional) The GCE disk type, e.g. pd-standard, pd-ssd, or local-ssd.
-
-* `scratch` - (Optional) Whether the disk is a scratch disk as opposed to a
-    persistent disk (required for local-ssd).
-
-* `size` - (Optional) The size of the image in gigabytes. If not specified, it
-    will inherit the size of its base image. Do not specify for local SSDs as
-    their size is fixed.
-
-* `device_name` - (Optional) Name with which attached disk will be accessible
-    under `/dev/disk/by-id/`
-
-* `disk_encryption_key_raw` - (Optional) A 256-bit [customer-supplied encryption key]
-    (https://cloud.google.com/compute/docs/disks/customer-supplied-encryption),
-    encoded in [RFC 4648 base64](https://tools.ietf.org/html/rfc4648#section-4)
-    to encrypt this disk.
-
 The `attached_disk` block supports:
 
-* `source` - (Required) The self_link of the disk to attach to this instance.
+* `source` - (Required) The name or self_link of the disk to attach to this instance.
 
 * `device_name` - (Optional) Name with which the attached disk will be accessible
     under `/dev/disk/by-id/`
+
+* `mode` - (Optional) Either "READ_ONLY" or "READ_WRITE", defaults to "READ_WRITE"
+    If you have a persistent disk with data that you want to share
+    between multiple instances, detach it from any read-write instances and
+    attach it to one or more instances in read-only mode.
 
 * `disk_encryption_key_raw` - (Optional) A 256-bit [customer-supplied encryption key]
     (https://cloud.google.com/compute/docs/disks/customer-supplied-encryption),
@@ -229,7 +213,7 @@ The `network_interface` block supports:
     on that network). This block can be repeated multiple times. Structure
     documented below.
 
-* `alias_ip_range` - (Optional, [Beta](/docs/providers/google/index.html#beta-features)) An
+* `alias_ip_range` - (Optional) An
     array of alias IP ranges for this network interface. Can only be specified for network
     interfaces on subnet-mode networks. Structure documented below.
 
@@ -237,6 +221,11 @@ The `access_config` block supports:
 
 * `nat_ip` - (Optional) The IP address that will be 1:1 mapped to the instance's
     network ip. If not given, one will be generated.
+
+* `public_ptr_domain_name` - (Optional) The DNS domain name for the public PTR record.
+    To set this field on an instance, you must be verified as the owner of the domain.
+    See [the docs](https://cloud.google.com/compute/docs/instances/create-ptr-record) for how
+    to become verified as a domain owner.
 
 The `alias_ip_range` block supports:
 
@@ -253,16 +242,12 @@ The `service_account` block supports:
 
 * `email` - (Optional) The service account e-mail address. If not given, the
     default Google Compute Engine service account is used.
+    **Note**: [`allow_stopping_for_update`](#allow_stopping_for_update) must be set to true in order to update this field.
 
 * `scopes` - (Required) A list of service scopes. Both OAuth2 URLs and gcloud
-    short names are supported.
-
-(DEPRECATED) The `network` block supports:
-
-* `source` - (Required) The name of the network to attach this interface to.
-
-* `address` - (Optional) The IP address of a reserved IP address to assign
-    to this interface.
+    short names are supported. To allow full access to all Cloud APIs, use the
+    `cloud-platform` scope. See a complete list of scopes [here](https://cloud.google.com/sdk/gcloud/reference/alpha/compute/instances/set-scopes#--scopes).
+    **Note**: [`allow_stopping_for_update`](#allow_stopping_for_update) must be set to true in order to update this field.
 
 The `scheduling` block supports:
 
@@ -274,13 +259,6 @@ The `scheduling` block supports:
 
 * `automatic_restart` - (Optional) Specifies if the instance should be
     restarted if it was terminated by Compute Engine (not a user).
-
----
-
-* `guest_accelerator` - (Optional, [Beta](/docs/providers/google/index.html#beta-features)) List of the type and count of accelerator cards attached to the instance. Structure documented below.
-
-* `min_cpu_platform` - (Optional, [Beta](/docs/providers/google/index.html#beta-features)) Specifies a minimum CPU platform for the VM instance. Applicable values are the friendly names of CPU platforms, such as
-`Intel Haswell` or `Intel Skylake`. See the complete list [here](https://cloud.google.com/compute/docs/instances/specify-min-cpu-platform).
 
 The `guest_accelerator` block supports:
 
@@ -320,3 +298,15 @@ exported:
 * `disk.0.disk_encryption_key_sha256` - The [RFC 4648 base64](https://tools.ietf.org/html/rfc4648#section-4)
     encoded SHA-256 hash of the [customer-supplied encryption key]
     (https://cloud.google.com/compute/docs/disks/customer-supplied-encryption) that protects this resource.
+
+## Import
+
+~> **Note:** The fields `boot_disk.0.disk_entryption_raw` and `attached_disk.*.disk_encryption_key_raw` cannot be imported automatically. The API doesn't return this information. If you are setting one of these fields in your config, you will need to update your state manually after importing the resource.
+
+Instances can be imported using the `project`, `zone` and `name`, e.g.
+
+```
+$ terraform import google_compute_instance.default gcp-project/us-central1-a/test
+```
+
+[custom-vm-types]: https://cloud.google.com/dataproc/docs/concepts/compute/custom-machine-types

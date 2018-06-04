@@ -17,8 +17,14 @@ and
 
 ```hcl
 resource "google_compute_network" "default" {
-  name       = "compute-network"
-  ipv4_range = "10.0.0.0/16"
+  name = "compute-network"
+}
+
+resource "google_compute_subnetwork" "default" {
+  name          = "compute-subnetwork"
+  ip_cidr_range = "10.0.0.0/16"
+  network       = "${google_compute_network.default.self_link}"
+  region        = "us-central1"
 }
 
 resource "google_compute_route" "default" {
@@ -34,15 +40,15 @@ resource "google_compute_route" "default" {
 
 The following arguments are supported:
 
-* `dest_range` - (Required) The destination IPv4 address range that this
-    route applies to.
-
 * `name` - (Required) A unique name for the resource, required by GCE.
     Changing this forces a new resource to be created.
 
+* `dest_range` - (Required) The destination IPv4 address range that this
+    route applies to.
+
 * `network` - (Required) The name or self_link of the network to attach this route to.
 
-* `priority` - (Required) The priority of this route, used to break ties.
+* `priority` - (Optional) The priority of this route, used to break ties. Defaults to 1000.
 
 - - -
 
@@ -62,7 +68,7 @@ The following arguments are supported:
 * `next_hop_vpn_tunnel` - (Optional) The name of the VPN to route to if this
     route is matched.
 
-* `project` - (Optional) The project in which the resource belongs. If it
+* `project` - (Optional) The ID of the project in which the resource belongs. If it
     is not provided, the provider project is used.
 
 * `tags` - (Optional) The tags that this route applies to.

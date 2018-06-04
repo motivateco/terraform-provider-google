@@ -12,6 +12,8 @@ import (
 )
 
 func TestAccComputeGlobalAddress_basic(t *testing.T) {
+	t.Parallel()
+
 	var addr compute.Address
 
 	resource.Test(t, resource.TestCase{
@@ -20,7 +22,7 @@ func TestAccComputeGlobalAddress_basic(t *testing.T) {
 		CheckDestroy: testAccCheckComputeGlobalAddressDestroy,
 		Steps: []resource.TestStep{
 			resource.TestStep{
-				Config: testAccComputeGlobalAddress_basic,
+				Config: testAccComputeGlobalAddress_basic(),
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheckComputeGlobalAddressExists(
 						"google_compute_global_address.foobar", &addr),
@@ -29,11 +31,18 @@ func TestAccComputeGlobalAddress_basic(t *testing.T) {
 					testAccCheckComputeGlobalAddressIpVersion("google_compute_global_address.foobar", ""),
 				),
 			},
+			resource.TestStep{
+				ResourceName:      "google_compute_global_address.foobar",
+				ImportState:       true,
+				ImportStateVerify: true,
+			},
 		},
 	})
 }
 
 func TestAccComputeGlobalAddress_ipv6(t *testing.T) {
+	t.Parallel()
+
 	var addr compute.Address
 
 	resource.Test(t, resource.TestCase{
@@ -42,12 +51,17 @@ func TestAccComputeGlobalAddress_ipv6(t *testing.T) {
 		CheckDestroy: testAccCheckComputeGlobalAddressDestroy,
 		Steps: []resource.TestStep{
 			resource.TestStep{
-				Config: testAccComputeGlobalAddress_ipv6,
+				Config: testAccComputeGlobalAddress_ipv6(),
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheckComputeGlobalAddressExists(
 						"google_compute_global_address.foobar", &addr),
 					testAccCheckComputeGlobalAddressIpVersion("google_compute_global_address.foobar", "IPV6"),
 				),
+			},
+			resource.TestStep{
+				ResourceName:      "google_compute_global_address.foobar",
+				ImportState:       true,
+				ImportStateVerify: true,
 			},
 		},
 	})
@@ -126,13 +140,19 @@ func testAccCheckComputeGlobalAddressIpVersion(n, version string) resource.TestC
 	}
 }
 
-var testAccComputeGlobalAddress_basic = fmt.Sprintf(`
+func testAccComputeGlobalAddress_basic() string {
+	return fmt.Sprintf(`
 resource "google_compute_global_address" "foobar" {
 	name = "address-test-%s"
+	description = "Created for Terraform acceptance testing"
 }`, acctest.RandString(10))
+}
 
-var testAccComputeGlobalAddress_ipv6 = fmt.Sprintf(`
+func testAccComputeGlobalAddress_ipv6() string {
+	return fmt.Sprintf(`
 resource "google_compute_global_address" "foobar" {
 	name = "address-test-%s"
+	description = "Created for Terraform acceptance testing"
 	ip_version = "IPV6"
 }`, acctest.RandString(10))
+}

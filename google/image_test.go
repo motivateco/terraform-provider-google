@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"testing"
 
-	compute "google.golang.org/api/compute/v1"
+	"google.golang.org/api/compute/v1"
 
 	"github.com/hashicorp/terraform/helper/acctest"
 	"github.com/hashicorp/terraform/helper/resource"
@@ -12,6 +12,8 @@ import (
 )
 
 func TestAccComputeImage_resolveImage(t *testing.T) {
+	t.Parallel()
+
 	var image compute.Image
 	rand := acctest.RandString(10)
 	name := fmt.Sprintf("test-image-%s", rand)

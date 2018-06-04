@@ -25,13 +25,15 @@ func testBucketName() string {
 	return fmt.Sprintf("%s-%d", "tf-test-acl-bucket", acctest.RandInt())
 }
 
-func TestAccGoogleStorageBucketAcl_basic(t *testing.T) {
+func TestAccStorageBucketAcl_basic(t *testing.T) {
+	t.Parallel()
+
 	bucketName := testBucketName()
 	skipIfEnvNotSet(t, "GOOGLE_PROJECT_NUMBER")
 	resource.Test(t, resource.TestCase{
 		PreCheck:     func() { testAccPreCheck(t) },
 		Providers:    testAccProviders,
-		CheckDestroy: testAccGoogleStorageBucketAclDestroy,
+		CheckDestroy: testAccStorageBucketAclDestroy,
 		Steps: []resource.TestStep{
 			resource.TestStep{
 				Config: testGoogleStorageBucketsAclBasic1(bucketName),
@@ -44,13 +46,15 @@ func TestAccGoogleStorageBucketAcl_basic(t *testing.T) {
 	})
 }
 
-func TestAccGoogleStorageBucketAcl_upgrade(t *testing.T) {
+func TestAccStorageBucketAcl_upgrade(t *testing.T) {
+	t.Parallel()
+
 	bucketName := testBucketName()
 	skipIfEnvNotSet(t, "GOOGLE_PROJECT_NUMBER")
 	resource.Test(t, resource.TestCase{
 		PreCheck:     func() { testAccPreCheck(t) },
 		Providers:    testAccProviders,
-		CheckDestroy: testAccGoogleStorageBucketAclDestroy,
+		CheckDestroy: testAccStorageBucketAclDestroy,
 		Steps: []resource.TestStep{
 			resource.TestStep{
 				Config: testGoogleStorageBucketsAclBasic1(bucketName),
@@ -80,13 +84,15 @@ func TestAccGoogleStorageBucketAcl_upgrade(t *testing.T) {
 	})
 }
 
-func TestAccGoogleStorageBucketAcl_downgrade(t *testing.T) {
+func TestAccStorageBucketAcl_downgrade(t *testing.T) {
+	t.Parallel()
+
 	bucketName := testBucketName()
 	skipIfEnvNotSet(t, "GOOGLE_PROJECT_NUMBER")
 	resource.Test(t, resource.TestCase{
 		PreCheck:     func() { testAccPreCheck(t) },
 		Providers:    testAccProviders,
-		CheckDestroy: testAccGoogleStorageBucketAclDestroy,
+		CheckDestroy: testAccStorageBucketAclDestroy,
 		Steps: []resource.TestStep{
 			resource.TestStep{
 				Config: testGoogleStorageBucketsAclBasic2(bucketName),
@@ -116,12 +122,14 @@ func TestAccGoogleStorageBucketAcl_downgrade(t *testing.T) {
 	})
 }
 
-func TestAccGoogleStorageBucketAcl_predefined(t *testing.T) {
+func TestAccStorageBucketAcl_predefined(t *testing.T) {
+	t.Parallel()
+
 	bucketName := testBucketName()
 	resource.Test(t, resource.TestCase{
 		PreCheck:     func() { testAccPreCheck(t) },
 		Providers:    testAccProviders,
-		CheckDestroy: testAccGoogleStorageBucketAclDestroy,
+		CheckDestroy: testAccStorageBucketAclDestroy,
 		Steps: []resource.TestStep{
 			resource.TestStep{
 				Config: testGoogleStorageBucketsAclPredefined(bucketName),
@@ -164,7 +172,7 @@ func testAccCheckGoogleStorageBucketAcl(bucket, roleEntityS string) resource.Tes
 	}
 }
 
-func testAccGoogleStorageBucketAclDestroy(s *terraform.State) error {
+func testAccStorageBucketAclDestroy(s *terraform.State) error {
 	config := testAccProvider.Meta().(*Config)
 
 	for _, rs := range s.RootModule().Resources {

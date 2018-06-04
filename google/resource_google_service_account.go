@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"strings"
 
 	"github.com/hashicorp/terraform/helper/schema"
 	"google.golang.org/api/iam/v1"
@@ -15,6 +16,9 @@ func resourceGoogleServiceAccount() *schema.Resource {
 		Read:   resourceGoogleServiceAccountRead,
 		Delete: resourceGoogleServiceAccountDelete,
 		Update: resourceGoogleServiceAccountUpdate,
+		Importer: &schema.ResourceImporter{
+			State: schema.ImportStatePassthrough,
+		},
 		Schema: map[string]*schema.Schema{
 			"email": &schema.Schema{
 				Type:     schema.TypeString,
@@ -29,9 +33,10 @@ func resourceGoogleServiceAccount() *schema.Resource {
 				Computed: true,
 			},
 			"account_id": &schema.Schema{
-				Type:     schema.TypeString,
-				Required: true,
-				ForceNew: true,
+				Type:         schema.TypeString,
+				Required:     true,
+				ForceNew:     true,
+				ValidateFunc: validateRFC1035Name(6, 30),
 			},
 			"display_name": &schema.Schema{
 				Type:     schema.TypeString,
@@ -39,12 +44,14 @@ func resourceGoogleServiceAccount() *schema.Resource {
 			},
 			"project": &schema.Schema{
 				Type:     schema.TypeString,
+				Computed: true,
 				Optional: true,
 				ForceNew: true,
 			},
 			"policy_data": &schema.Schema{
-				Type:     schema.TypeString,
-				Optional: true,
+				Type:       schema.TypeString,
+				Optional:   true,
+				Deprecated: "Use the 'google_service_account_iam_policy' resource to define policies for a service account",
 			},
 		},
 	}
@@ -86,8 +93,7 @@ func resourceGoogleServiceAccountCreate(d *schema.ResourceData, meta interface{}
 
 		// Retrieve existing IAM policy from project. This will be merged
 		// with the policy defined here.
-		// TODO(evanbrown): Add an 'authoritative' flag that allows policy
-		// in manifest to overwrite existing policy.
+		// TODO: overwrite existing policy, instead of merging it
 		p, err := getServiceAccountIamPolicy(sa.Name, config)
 		if err != nil {
 			return fmt.Errorf("Could not find service account %q when applying IAM policy: %s", sa.Name, err)
@@ -120,6 +126,8 @@ func resourceGoogleServiceAccountRead(d *schema.ResourceData, meta interface{}) 
 
 	d.Set("email", sa.Email)
 	d.Set("unique_id", sa.UniqueId)
+	d.Set("project", sa.ProjectId)
+	d.Set("account_id", strings.Split(sa.Email, "@")[0])
 	d.Set("name", sa.Name)
 	d.Set("display_name", sa.DisplayName)
 	return nil
@@ -212,8 +220,7 @@ func resourceGoogleServiceAccountUpdate(d *schema.ResourceData, meta interface{}
 
 		// Retrieve existing IAM policy from project. This will be merged
 		// with the policy in the current state
-		// TODO(evanbrown): Add an 'authoritative' flag that allows policy
-		// in manifest to overwrite existing policy.
+		// TODO: overwrite existing policy instead of merging it
 		p, err := getServiceAccountIamPolicy(d.Id(), config)
 		if err != nil {
 			return err
